@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP on Databricks — Hour 1</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+  <style>
+    :root {
+      --r-main-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --r-heading-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --r-link-color: #ff3621;
+      --r-selection-background-color: #ff3621;
+    }
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; letter-spacing: -0.02em; }
+    .reveal h1 { font-size: 2.4em; }
+    .reveal h2 { font-size: 1.6em; color: #ff3621; }
+    .reveal h3 { font-size: 1.2em; }
+    .reveal pre code { font-size: 0.85em; line-height: 1.4; padding: 0.6em 1em; }
+    .reveal table { font-size: 0.7em; }
+    .reveal table th { background: #1b3139; color: #fff; }
+    .reveal blockquote { border-left: 4px solid #ff3621; padding: 0.5em 1em; font-size: 0.9em; }
+    .reveal .small { font-size: 0.7em; color: #888; }
+    .reveal .badge { background: #ff3621; color: #fff; padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.7em; }
+    .reveal ul li { margin: 0.2em 0; }
+    .reveal section.section-title { background: linear-gradient(135deg, #1b3139 0%, #ff3621 100%); }
+    .reveal section.section-title h1 { color: white; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================================================ -->
+<!-- TITLE                                                          -->
+<!-- ============================================================ -->
+<section>
+  <h1>MCP on Databricks</h1>
+  <h3>A 3-Hour Hands-On Workshop</h3>
+  <p class="small">Hour 1 — Fundamentals · For data engineers and data scientists · Free Edition</p>
+  <aside class="notes">
+    Welcome. This hour gives us a shared mental model. The next two hours are hands-on:
+    five linear sections. All in the workspace.
+  </aside>
+</section>
+
+<section>
+  <h2>Today's scenario</h2>
+  <blockquote>The Austin franchise of our bakery chain is underperforming.<br>Figure out <em>why</em> before the next exec review.</blockquote>
+  <p>Dataset: <code>samples.bakehouse</code> (preloaded in Free Edition).</p>
+  <p>You'll use Vector Search over reviews, Genie text-to-SQL over sales, the SQL MCP for follow-ups, and you.com for outside context.</p>
+  <aside class="notes">
+    This frame matters: every primitive we'll cover is a tool you'd reach for during this investigation.
+  </aside>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: WHY MCP                                             -->
+<!-- ============================================================ -->
+<section class="section-title"><h1>1. Why MCP</h1></section>
+
+<section>
+  <h2>The problem MCP solves</h2>
+  <p>Before MCP, every host re-implemented every integration:</p>
+  <pre><code class="language-text">Cursor    ─┐
+Claude Desktop ─┼─→ each builds its own GitHub, Slack, DB, ... connectors
+your agent ─┘
+
+N hosts × M tools = N × M glue code.</code></pre>
+  <aside class="notes">
+    This is the same N×M problem LSP solved for editors and language servers.
+  </aside>
+</section>
+
+<section>
+  <h2>After MCP</h2>
+  <pre><code class="language-text">Genie Code  ─┐
+Playground  ─┼─→ MCP ─→ Genie, Vector Search, UC Functions, you.com, your custom App, ...
+your notebook ─┘
+
+N + M, not N × M.</code></pre>
+  <p class="small">USB-C of LLM context. One connector, many devices on either side.</p>
+</section>
+
+<section>
+  <h2>Why it took off (in 18 months)</h2>
+  <ul>
+    <li>Open spec, open SDKs (TypeScript, Python, Rust, Kotlin, …).</li>
+    <li>Anthropic shipped first; OpenAI, Google, Microsoft followed.</li>
+    <li>Hosts inside Databricks: <strong>Genie Code</strong> (in-workspace agent, replaced Databricks Assistant in March 2026), <strong>AI Playground</strong>, your own notebooks. Hosts outside Databricks: Claude Code, Cursor, Claude Desktop, VS Code, ChatGPT desktop, others.</li>
+    <li>Servers: thousands public, plus first-party from Slack, Notion, GitHub, Atlassian, <strong>Databricks</strong>.</li>
+  </ul>
+  <aside class="notes">
+    The killer feature is composability. You don't ship one agent — you ship one server, and every host gets it.
+  </aside>
+</section>
+
+<section>
+  <h2>What MCP is <em>not</em></h2>
+  <ul>
+    <li><strong>Not a runtime.</strong> It does not execute your code.</li>
+    <li><strong>Not a model.</strong> Provider-agnostic.</li>
+    <li><strong>Not a framework.</strong> FastMCP is a framework. MCP is the wire format.</li>
+    <li><strong>Not "function calling."</strong> Function calling is one model's API. MCP is a protocol that decouples tools from any model.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What it actually is</h2>
+  <p>A <strong>JSON-RPC 2.0</strong> protocol. Two methods you'll see most often:</p>
+  <pre><code class="language-json">→ {"method": "tools/list"}
+← {"tools": [{"name": "execute_sql", "inputSchema": {...}}, ...]}
+
+→ {"method": "tools/call", "params": {"name": "execute_sql", "arguments": {"query": "SELECT 1"}}}
+← {"content": [{"type": "text", "text": "[{\"_c0\": 1}]"}]}</code></pre>
+  <p class="small">That's the whole wire format. Everything else is convention.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: MENTAL MODEL                                        -->
+<!-- ============================================================ -->
+<section class="section-title"><h1>2. Mental Model</h1></section>
+
+<section>
+  <h2>The four roles</h2>
+  <table>
+    <tr><th>Role</th><th>What it is</th><th>In this workshop</th></tr>
+    <tr><td><strong>Host</strong></td><td>The app the user interacts with</td><td>Genie Code, AI Playground, your notebook</td></tr>
+    <tr><td><strong>Client</strong></td><td>Protocol library inside the host</td><td>One client per server</td></tr>
+    <tr><td><strong>Server</strong></td><td>Exposes capabilities</td><td>Managed: Genie Spaces, Vector Search, UC Functions. Custom: your <code>bakehouse-detective</code> Databricks App.</td></tr>
+    <tr><td><strong>Roots</strong></td><td>Workspace boundaries the host advertises</td><td>your workspace path / catalog</td></tr>
+  </table>
+  <p class="small">Servers don't talk to each other. The host fans out and reconciles.</p>
+</section>
+
+<section>
+  <h2>Three primitives a server exposes</h2>
+  <table>
+    <tr><th>Primitive</th><th>Who picks it</th><th>Workshop example</th></tr>
+    <tr><td><strong>Tool</strong></td><td>Model</td><td><code>franchise_sales_trend(franchise, days)</code></td></tr>
+    <tr><td><strong>Resource</strong></td><td>App / user</td><td><code>franchise://austin/profile</code></td></tr>
+    <tr><td><strong>Prompt</strong></td><td>User</td><td>slash-command <code>/diagnose_franchise austin</code></td></tr>
+  </table>
+  <p>People remember tools. The other two are where the leverage is.</p>
+</section>
+
+<section>
+  <h2>Tools — model-controlled</h2>
+  <pre><code class="language-python">@mcp.tool()
+def franchise_sales_trend(franchise: str, days: int = 90) -> list[dict]:
+    """30-day per-product sales for a franchise. Use when investigating a slump."""
+    ...</code></pre>
+  <ul>
+    <li>Model reads your description and decides when to call.</li>
+    <li>Description should say <em>when</em> to call, not <em>what</em> it does.</li>
+    <li>JSON-Schema args, JSON return.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Resources — app-controlled</h2>
+  <pre><code class="language-python">@mcp.resource("franchise://list")
+def franchise_index() -> str:
+    return "# Franchises\n- austin\n- portland\n- chicago\n..."</code></pre>
+  <p><strong>Why it matters:</strong> the host can show this in a picker UI. The user attaches it to context. The model never has to read 5,000 franchises into its context window.</p>
+  <p class="small">Think: file attachments, but addressed by URI and computed on demand.</p>
+</section>
+
+<section>
+  <h2>Prompts — user-controlled</h2>
+  <pre><code class="language-python">@mcp.prompt()
+def diagnose_franchise(franchise: str) -> list[Message]:
+    return [user(f"Why is {franchise} underperforming? "
+                 "Use search_reviews, then franchise_sales_trend, then compose_brief.")]</code></pre>
+  <p>User picks <code>/diagnose_franchise austin</code> from a slash-menu. Server expands the templated workflow.</p>
+  <p>This is where opinionated workflows belong — <strong>not</strong> buried in tool docstrings.</p>
+</section>
+
+<section>
+  <h2>Who picks what?</h2>
+  <pre><code class="language-text">┌──────────────┬──────────────────────────────────────┐
+│ Tool         │ Model picks. Model is in charge.     │
+│ Resource     │ App / user picks. Indexable.         │
+│ Prompt       │ User picks. Slash-command UX.        │
+└──────────────┴──────────────────────────────────────┘</code></pre>
+  <p>Most servers ship only tools. They miss half the spec.</p>
+  <aside class="notes">
+    The exam question: when you have a list of 50,000 entities, do you make a tool that returns the list, or a resource that the host can paginate? Answer: resource.
+  </aside>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: BEYOND TOOLS                                        -->
+<!-- ============================================================ -->
+<section class="section-title"><h1>3. Beyond Tools</h1></section>
+
+<section>
+  <h2>Three things people miss</h2>
+  <ol>
+    <li><strong>Sampling</strong> — server calls back to host's LLM</li>
+    <li><strong>Elicitation</strong> — server asks the user a question mid-call</li>
+    <li><strong>Notifications</strong> — server pushes updates to host</li>
+  </ol>
+  <p class="small">All three turn the host ↔ server conversation bidirectional.</p>
+</section>
+
+<section>
+  <h2>Sampling — server uses host's LLM</h2>
+  <pre><code class="language-python">@mcp.tool()
+async def compose_brief(ctx: Context, franchise: str) -> str:
+    reviews = search_reviews(franchise, q="complaint")
+    trend   = franchise_sales_trend(franchise, days=90)
+
+    # Server has NO API key. It asks the host's LLM to do the work.
+    result = await ctx.session.create_message(
+        messages=[{"role": "user", "content": f"Diagnose: {reviews}, {trend}"}],
+        max_tokens=500,
+    )
+    return result.content.text</code></pre>
+  <p><strong>Why use it:</strong> no API key on the server, no model lock-in, host pays the bill, BYO-model from the host's perspective.</p>
+</section>
+
+<section>
+  <h2>Elicitation — server asks the user</h2>
+  <pre><code class="language-python">@mcp.tool()
+async def log_finding(ctx: Context, franchise: str, hypothesis: str) -> str:
+    response = await ctx.elicit(
+        message="Confidence?",
+        schema={"type": "string", "enum": ["low", "medium", "high"]},
+    )
+    confidence = response.content
+    ...</code></pre>
+  <p>Tool needs missing structured input? Don't fail or hallucinate — <strong>ask</strong>.</p>
+  <p class="small">Host renders a picker UI. Tool resumes.</p>
+</section>
+
+<section>
+  <h2>Notifications — server pushes updates</h2>
+  <pre><code class="language-python">await ctx.session.send_resource_updated(uri="franchise://austin/recent_signals")</code></pre>
+  <p>Resources can change. Server notifies, host re-fetches. No polling.</p>
+  <p>Use cases: live query results, evolving documents, long-running jobs that emit progress.</p>
+</section>
+
+<section>
+  <h2>When to reach for each (DE / DS edition)</h2>
+  <table>
+    <tr><th>Want to…</th><th>Use…</th></tr>
+    <tr><td>Summarize a long query result</td><td>Sampling</td></tr>
+    <tr><td>Ask "which catalog?" mid-tool</td><td>Elicitation</td></tr>
+    <tr><td>Stream pipeline status to the agent</td><td>Notifications</td></tr>
+    <tr><td>Let user attach an account profile</td><td>Resource</td></tr>
+    <tr><td>One-click "weekly investigation"</td><td>Prompt</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: TRANSPORTS & AUTH                                   -->
+<!-- ============================================================ -->
+<section class="section-title"><h1>4. Transports &amp; Auth</h1></section>
+
+<section>
+  <h2>Two transports, one deprecated</h2>
+  <table>
+    <tr><th>Transport</th><th>When</th></tr>
+    <tr><td><strong>stdio</strong></td><td>Local servers spawned by the host. Used by desktop hosts like Cursor / Claude Desktop.</td></tr>
+    <tr><td><strong>Streamable HTTP</strong></td><td>Remote / hosted servers. <strong>Use for production.</strong> Resumable sessions.</td></tr>
+    <tr><td><s>SSE</s></td><td>Deprecated. Streamable HTTP replaces it.</td></tr>
+  </table>
+  <p class="small">Section E hosts a FastMCP server on a Databricks App — that's Streamable HTTP behind workspace OAuth.</p>
+</section>
+
+<section>
+  <h2>Auth — what the spec says</h2>
+  <p>MCP defers auth to the transport. For Streamable HTTP, the spec defines <strong>OAuth 2.1</strong> with dynamic client registration.</p>
+  <p>Production deployments use one of:</p>
+  <ul>
+    <li><strong>OAuth bearer tokens</strong> — server validates JWT per request.</li>
+    <li><strong>Identity passthrough</strong> — host forwards the user's token; server queries downstream <em>as that user</em>. Gold standard.</li>
+    <li><strong>Service principal</strong> — server holds its own credential. Easier, weaker attribution.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>How Databricks handles it (in-workspace)</h2>
+  <p>When you use Genie Code or AI Playground, the host is <em>already</em> authenticated as you. Tool calls hit managed MCP endpoints with your workspace identity.</p>
+  <pre><code class="language-text">Genie Code → managed Genie/VS/UC MCP → Databricks REST as YOU → UC enforces ACLs</code></pre>
+  <p class="small">No CLI login. No tokens to paste. The browser session is the credential.</p>
+</section>
+
+<section>
+  <h2>Identity passthrough on Databricks Apps</h2>
+  <p>If you host a FastMCP server on a Databricks App (covered as <em>pattern</em>, not built today):</p>
+  <pre><code class="language-python">@app.middleware("http")
+async def capture_user(request, call_next):
+    token = request.headers.get("x-forwarded-access-token")
+    email = request.headers.get("x-forwarded-email")
+    # Use 'token' for downstream Databricks calls — every query runs as the user.</code></pre>
+  <p class="small">UC RLS / CLS just works. Real per-user audit.</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: MCP ON DATABRICKS                                   -->
+<!-- ============================================================ -->
+<section class="section-title"><h1>5. MCP on Databricks</h1></section>
+
+<section>
+  <h2>The Databricks MCP landscape</h2>
+  <table>
+    <tr><th>Type</th><th>Where</th><th>What it gives you</th></tr>
+    <tr><td><strong>Managed</strong></td><td>Auto-available in <em>Agents → MCP Servers</em></td><td>Genie Spaces, Vector Search indexes, UC Functions — no setup</td></tr>
+    <tr><td><strong>External</strong></td><td>Add via URL in <em>Agents → MCP Servers</em></td><td>Public servers (you.com, etc.). OAuth required.</td></tr>
+    <tr><td><strong>Custom Databricks App</strong></td><td>Deploy your own FastMCP server, then add it</td><td>Sampling, elicitation, resources, side effects, identity passthrough</td></tr>
+    <tr><td>(outside Databricks)</td><td>Cursor / Claude Code with <code>ai-dev-kit</code></td><td>Mentioned for context — not the workshop's path.</td></tr>
+  </table>
+  <p class="small">Cap: max <strong>20 tools</strong> across all attached MCP servers per session.</p>
+</section>
+
+<section>
+  <h2>The two in-workspace hosts</h2>
+  <table>
+    <tr><th></th><th>Genie Code</th><th>AI Playground</th></tr>
+    <tr><td>UX</td><td>Ambient chat alongside your notebook / SQL editor</td><td>Explicit chat surface for tool + prompt experimentation</td></tr>
+    <tr><td>Best for</td><td>"Help me while I work"</td><td>"Show me what the model decided to call"</td></tr>
+    <tr><td>Trace visibility</td><td>Hidden by default</td><td>Tool calls + arguments visible in the trace</td></tr>
+  </table>
+  <p class="small">Same managed MCPs available in both. We use both in this workshop.</p>
+</section>
+
+<section>
+  <h2>UC functions <em>are</em> MCP tools</h2>
+  <pre><code class="language-sql">CREATE OR REPLACE FUNCTION main.workshop.franchise_health(franchise STRING)
+RETURNS DOUBLE
+LANGUAGE PYTHON AS $$ ... $$;</code></pre>
+  <p>The Databricks UC Functions MCP server exposes every UC function in a schema as a tool, with permissions enforced by UC.</p>
+  <p><strong>Rule of thumb:</strong> if it's "read or compute over Delta," make it a UC function. Reach for FastMCP only for sampling, elicitation, resources, or non-Delta side effects.</p>
+</section>
+
+<section>
+  <h2>Genie is a tool, not the agent</h2>
+  <pre><code class="language-text">your agent
+  ├─ ask_genie:        "Crumbly Creations daily revenue, full window"
+  ├─ query_vs_index:   "Austin reviews mentioning waiting"
+  ├─ you.com search:   "Austin coffee competition May 2024"
+  ├─ sampling:         "summarize all of the above"
+  └─ log_finding:      writes to Delta</code></pre>
+  <p>The mistake is making Genie itself the agent. Genie does one thing well: text-to-SQL on a curated space. Use it as a tool, then orchestrate around it.</p>
+</section>
+
+<section>
+  <h2>Production patterns (appendix)</h2>
+  <ul>
+    <li><strong>Gateway pattern</strong> — one server fronts many. Single auth, single observability point.</li>
+    <li><strong>Identity passthrough</strong> — host's user identity ➞ Databricks Apps ➞ UC.</li>
+    <li><strong>Audit + lineage</strong> — Delta tables for <code>mcp_calls</code>, <code>mcp_lineage</code>. AI/BI dashboard on top.</li>
+    <li><strong>Resources for catalog UX</strong> — don't autocomplete 5K rows.</li>
+  </ul>
+  <p class="small">See <code>docs/02-architecture.md</code> for the full discussion.</p>
+</section>
+
+<section>
+  <h2>What about Lakebase and Apps?</h2>
+  <p>Free Edition supports Databricks Apps and Lakebase. We don't deploy in this workshop (keeping the agenda tight) — but the typical "MCP server in production on Databricks" stack is:</p>
+  <pre><code class="language-text">FastMCP server
+  + Databricks App  (hosting + OAuth)
+  + Lakebase        (low-latency state, e.g. findings, sessions)
+  + UC              (data, audit, governance)</code></pre>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: THE WORKSHOP SCENARIO                               -->
+<!-- ============================================================ -->
+<section class="section-title"><h1>6. The Workshop Scenario</h1></section>
+
+<section>
+  <h2>The Bakehouse Detective</h2>
+  <blockquote>On May 8, 2024, Crumbly Creations (Austin) took only $6 in revenue. Find out why.</blockquote>
+  <p>Same scenario across all five hands-on sections.</p>
+</section>
+
+<section>
+  <h2>Data shape (samples.bakehouse, preloaded)</h2>
+  <table>
+    <tr><th>Table</th><th>Type</th><th>Used in</th></tr>
+    <tr><td><code>media_customer_reviews</code></td><td>Text (204 rows)</td><td>Vector Search via managed MCP</td></tr>
+    <tr><td><code>sales_transactions</code></td><td>Numeric / temporal (3,333 rows)</td><td>Genie text-to-SQL, direct SQL</td></tr>
+    <tr><td><code>sales_franchises</code></td><td>Dimension (48 rows)</td><td>Joins / filters</td></tr>
+  </table>
+  <p class="small">Date range: 2024-05-01 to 2024-05-17. Don't ask for "last 90 days" — anchor to the dataset window.</p>
+</section>
+
+<section>
+  <h2>What you'll do for the next two hours</h2>
+  <ol>
+    <li><strong>Section A</strong> — Genie Code in a notebook. Managed MCP. ~25 min.</li>
+    <li><strong>Section B</strong> — AI Playground. Same MCPs, with the trace visible. ~25 min.</li>
+    <li><strong>Section C</strong> — External MCP — discussion + screencaps. ~10 min.</li>
+    <li><strong>Section D</strong> — A notebook that walks the wire: tools, resources, prompts, sampling, elicitation. ~35 min.</li>
+    <li><strong>Section E</strong> — Deploy a custom FastMCP server as a Databricks App, then use it from Genie Code. ~25 min.</li>
+  </ol>
+  <p>Linear curriculum. No paths to pick.</p>
+</section>
+
+<section>
+  <h2>You're ready</h2>
+  <p>Open <code>01-genie-code/README.md</code> and let's go.</p>
+  <p class="small">All five sections live in the workshop repo: <code>01-genie-code/</code> through <code>05-custom-app/</code>.</p>
+  <h3 style="margin-top:1em">Questions?</h3>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'fade',
+    plugins: [RevealHighlight, RevealNotes],
+  });
+</script>
+</body>
+</html>

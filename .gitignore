@@ -1,3 +1,18 @@
+# Per-user ai-dev-kit + host MCP configs (regenerated on each user's machine)
+.ai-dev-kit/
+.claude/
+.cursor/
+.vscode/
+.mcp.json
+.github/skills/
+
+# macOS
+.DS_Store
+
+# Per-user Path B env
+path2-custom-mcp/.env
+path2-custom-mcp/.venv/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

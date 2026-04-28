@@ -1,0 +1,57 @@
+# MCP Workshop — Databricks Asset Bundle
+#
+# Deploys the workshop's deployable artifacts:
+#   - Section E custom MCP server as a Databricks App
+#   - Section D notebook to the workspace
+#
+# Usage:
+#   databricks bundle validate -p free
+#   databricks bundle deploy   -p free
+#   databricks bundle run bakehouse_detective -p free   # starts the App
+#
+# Lecture HTML, READMEs, and external/managed MCP wiring are UI-only — not in the bundle.
+
+bundle:
+  name: mcp_workshop
+
+variables:
+  warehouse_id:
+    description: Serverless SQL warehouse the App connects to.
+    default: 87d8aff40bdd758f         # the Free Edition default; override per-target if different
+  catalog:
+    description: Catalog where `findings` lives.
+    default: workspace
+  schema:
+    description: Schema where `findings` lives.
+    default: default
+
+# Sync only the things the workspace actually needs. The READMEs and lecture
+# stay local — there's no need to clutter the workspace with them.
+sync:
+  include:
+    - notebook/mcp_under_the_hood.py
+    - app/**
+
+resources:
+  apps:
+    bakehouse_detective:
+      name: bakehouse-detective-mcp
+      description: Workshop custom MCP server (Section E) — adds log_finding, sampling, a resource picker, and a slash-prompt on top of managed MCPs.
+      source_code_path: ${workspace.file_path}/app
+      resources:
+        - name: warehouse_id
+          description: Serverless SQL warehouse used for identity-passthrough queries.
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
+
+targets:
+  free:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-011ce701-32d4.cloud.databricks.com
+    variables:
+      warehouse_id: 87d8aff40bdd758f
+      catalog: workspace
+      schema: default

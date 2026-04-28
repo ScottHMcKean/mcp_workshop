@@ -1,0 +1,15 @@
+command:
+  - "uvicorn"
+  - "main:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: warehouse_id   # bind the workspace's serverless warehouse at deploy time
+  - name: WORKSHOP_CATALOG
+    value: workspace
+  - name: WORKSHOP_SCHEMA
+    value: default
