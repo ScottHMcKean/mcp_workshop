@@ -284,21 +284,17 @@ async def debug_headers(request: Request) -> dict[str, Any]:
     }
 
 
-# --- Static pages: landing, lecture, demo -----------------------------------
+# --- Static pages: lecture + demo (demo is also the front door) -------------
 
 @app.get("/", include_in_schema=False)
-def landing() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+@app.get("/demo", include_in_schema=False)
+def demo() -> FileResponse:
+    return FileResponse(STATIC_DIR / "demo.html")
 
 
 @app.get("/lecture", include_in_schema=False)
 def lecture() -> FileResponse:
     return FileResponse(STATIC_DIR / "lecture.html")
-
-
-@app.get("/demo", include_in_schema=False)
-def demo() -> FileResponse:
-    return FileResponse(STATIC_DIR / "demo.html")
 
 
 # --- SSE investigation endpoint for the demo page ---------------------------

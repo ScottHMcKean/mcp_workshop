@@ -50,13 +50,12 @@ That's it. Sections A–E run in the workspace UI. (If you'd prefer a CLI deploy
 ├── notebook/
 │   └── mcp_under_the_hood.py  <- Section D notebook (Databricks source format)
 └── app/
-    ├── main.py                <- FastMCP server + landing/lecture/demo routes
+    ├── main.py                <- FastMCP server + demo + lecture routes
     ├── app.yaml
     ├── requirements.txt
     └── static/
-        ├── index.html         <- /         (landing)
-        ├── lecture.html       <- /lecture  (Hour 1 reveal.js deck)
-        └── demo.html          <- /demo     (live MCP investigation UI)
+        ├── demo.html          <- /  and /demo  (live MCP investigation UI)
+        └── lecture.html       <- /lecture     (Hour 1 reveal.js deck)
 ```
 
 ## Deployable artifacts (optional CLI path)
@@ -87,13 +86,13 @@ Some MCP surfaces shipped in March 2026 and Free Edition support is uncertain in
 
 > Before the workshop, **deploy the App once** (see Section E). Once it's running, every attendee just visits the App URL. No clones, no downloads, no setup.
 
-The App's landing page (`/`) has three cards:
+The App has two pages plus the MCP endpoint:
 
-- **Lecture** (`/lecture`) — the ~36-slide reveal.js deck. Press `s` for speaker notes.
-- **Demo** (`/demo`) — pick a franchise, watch the agent investigate live. Each MCP tool call streams in as a card. This is the workshop's "what is MCP doing?" moment in a single page.
-- **MCP endpoint** (`/mcp`) — the Streamable HTTP MCP server. Genie Code and Playground attach to this in Section E.
+- **`/`** (also `/demo`) — pick a franchise, watch the agent investigate live. Each MCP tool call streams in as a card. This is the workshop's "what is MCP doing?" moment in a single page.
+- **`/lecture`** — the ~36-slide reveal.js deck. Press `s` for speaker notes.
+- **`/mcp`** — the Streamable HTTP MCP endpoint. Genie Code and Playground attach to this in Section E. Don't open it in a browser — it speaks JSON-RPC, not HTML.
 
-End the lecture by clicking **Demo** and running an investigation on Crumbly Creations live. That's the bridge from concept to the rest of the workshop.
+End the lecture by visiting the App's root URL and running an investigation on Crumbly Creations live. That's the bridge from concept to the rest of the workshop.
 
 ---
 
