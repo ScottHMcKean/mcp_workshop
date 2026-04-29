@@ -58,7 +58,9 @@ The single most important governance decision: **does the MCP server act as the 
 | Service principal     | Easy, one identity to provision   | Lose per-user attribution; UC ACLs become "the SP can do everything" |
 | **Identity passthrough** | UC RLS/CLS just works; real audit | Must forward tokens correctly; tokens expire        |
 
-In a Databricks App, the user's OAuth token is available as `X-Forwarded-Access-Token`. Use it. Do not run an SP unless you have a hard reason.
+In a Databricks App with `user_authorization.scopes` declared in `app.yaml` and the user consented, the user's OAuth token is forwarded as `X-Forwarded-Access-Token`. Use it for full identity passthrough.
+
+> **Free Edition caveat (April 2026):** the platform forwards `x-forwarded-email`, `x-forwarded-user`, and `x-forwarded-preferred-username` but **not** the access token. Apps on Free Edition can attribute audit rows to the calling user but cannot execute as them. In paid workspaces the token forwarding works as documented. The workshop's `app/main.py` handles both modes — its step 0 SSE event tells you which is active.
 
 ## Pattern 3 — Tools that *are* UC functions
 

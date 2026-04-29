@@ -369,7 +369,12 @@ The same `app/` you've already seen serving the lecture and demo. It's a small F
 | `franchise://list`      | Resource: a markdown index of all 48 franchises.                                          |
 | `/diagnose_franchise`   | Prompt: a slash-command that orchestrates the four tools.                                |
 
-Identity passthrough: every UC call runs as the *calling user* via the `X-Forwarded-Access-Token` header that the Apps platform injects. **External curl calls won't have it** — by design — and the SQL tools fail fast with a clear error. Drive this from inside the workspace.
+Identity behavior: the App captures `x-forwarded-email` from every authenticated request and uses it for audit attribution (the `findings` table records who triggered each finding). Whether downstream UC and FMAPI calls run *as the user* (full identity passthrough) or as the App's service principal depends on workspace tier:
+
+- **Paid workspaces with `user_authorization` enabled** — `x-forwarded-access-token` is forwarded; the App runs every Databricks call as the calling user. UC RLS/CLS apply naturally.
+- **Free Edition (April 2026)** — only identity *attribution* headers come through, not the OAuth token. The App runs as its own service principal but logs the user's email for the audit trail. The demo's step 0 card tells you which mode you're in.
+
+Either mode is a real production pattern. The workshop demonstrates both — with the right copy in step 0.
 
 ## Step 1 — Walk through the source (5 min)
 
@@ -454,7 +459,7 @@ SELECT * FROM workspace.default.findings ORDER BY ts DESC LIMIT 5
 
 ![findings row in SQL Editor](docs/screenshots/findings-row.png)
 
-`user_email` populated as **you** — identity passthrough working.
+`user_email` populated as **you** — even in SP-execution mode, the audit attribution is the calling user. The step-0 card in the demo tells you whether you got full identity passthrough or just attribution.
 
 ## Discussion (5 min)
 

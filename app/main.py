@@ -54,19 +54,29 @@ FINDINGS_TABLE = f"{CATALOG}.{SCHEMA}.findings"
 mcp = FastMCP("bakehouse-detective")
 
 
+def _get_auth_token() -> tuple[str, str]:
+    """
+    Returns (token, identity) where identity is either the user's email
+    (identity passthrough) or 'service-principal' (App's own credentials).
+
+    The Apps platform sets X-Forwarded-Access-Token when:
+      (a) the App's app.yaml declares user_authorization scopes, AND
+      (b) the calling user has consented through the App's auth flow.
+    If either is missing we fall back to the App's service principal so the
+    workshop demo still functions — it just runs as the App, not as the user.
+    """
+    user_token = _user_token.get()
+    if user_token:
+        return user_token, _user_email.get()
+    # SP fallback: WorkspaceClient auto-detects DATABRICKS_CLIENT_ID/SECRET
+    # from the env that the Apps platform sets for every App.
+    headers = WorkspaceClient().config.authenticate()
+    return headers["Authorization"].split()[-1], "service-principal"
+
+
 def _connect():
-    """Connect as the calling user — UC enforces ACLs as that user."""
-    token = _user_token.get()
-    if not token:
-        # Without identity passthrough we'd OAuth-loop; fail fast and clearly.
-        # The Apps platform sets X-Forwarded-Access-Token only for users who
-        # reach the App through an authenticated workspace session (Genie Code,
-        # Playground, in-workspace browser). External clients won't have this.
-        raise RuntimeError(
-            "No X-Forwarded-Access-Token on this request. This server expects "
-            "identity passthrough — call it from Genie Code or AI Playground "
-            "inside the workspace, not directly via curl."
-        )
+    """Connect to the warehouse using whichever identity we have."""
+    token, _ = _get_auth_token()
     return sql.connect(
         server_hostname=HOST.replace("https://", ""),
         http_path=f"/sql/1.0/warehouses/{WAREHOUSE_ID}",
@@ -165,6 +175,12 @@ def log_finding(franchise: str, hypothesis: str, evidence: str) -> dict[str, Any
         ) USING DELTA
         """
     )
+    # Idempotent — ensures both the App's SP and any human user can write.
+    # Workshop scratch table; in production you'd scope grants more tightly.
+    try:
+        _exec(f"GRANT ALL PRIVILEGES ON TABLE {FINDINGS_TABLE} TO `account users`")
+    except Exception:
+        pass  # not the table owner this call; another caller already granted
     _exec(
         f"INSERT INTO {FINDINGS_TABLE} VALUES (current_timestamp(), ?, ?, ?, ?)",
         (_user_email.get(), franchise, hypothesis, evidence),
@@ -222,18 +238,50 @@ app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
 async def capture_user(request: Request, call_next):
-    """Pull the forwarded user identity from the App platform headers."""
+    """
+    Pull the forwarded user identity from the App platform headers.
+
+    On Free Edition (April 2026), Apps get x-forwarded-email and friends but
+    NOT x-forwarded-access-token. We capture both independently so audit
+    attribution works even when execution runs as the App's SP.
+    """
+    email = request.headers.get("x-forwarded-email")
+    if email:
+        _user_email.set(email)
     token = request.headers.get("x-forwarded-access-token")
-    email = request.headers.get("x-forwarded-email", "unknown")
     if token:
         _user_token.set(token)
-        _user_email.set(email)
     return await call_next(request)
 
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/debug/headers")
+async def debug_headers(request: Request) -> dict[str, Any]:
+    """Inspect what auth-relevant headers the App platform forwards.
+
+    Safe to share — token values are redacted (length + prefix only).
+    Useful when identity passthrough isn't working as expected.
+    """
+    interesting: dict[str, str] = {}
+    for key, value in request.headers.items():
+        kl = key.lower()
+        if any(x in kl for x in ("user", "auth", "token", "forwarded", "gap", "oauth", "x-")):
+            if "token" in kl or "authorization" in kl:
+                interesting[key] = (
+                    f"{value[:8]}…{value[-4:]} (len={len(value)})" if len(value) > 12 else "***"
+                )
+            else:
+                interesting[key] = value
+    return {
+        "auth_related_headers": dict(sorted(interesting.items())),
+        "user_token_captured": bool(_user_token.get()),
+        "user_email_captured": _user_email.get(),
+        "sp_env_present": bool(os.environ.get("DATABRICKS_CLIENT_ID")),
+    }
 
 
 # --- Static pages: landing, lecture, demo -----------------------------------
@@ -271,9 +319,14 @@ def _compose_brief_via_fmapi(franchise: str, trend: list[dict], reviews: list[di
     directly instead of using sampling — needed because the demo runs server-
     side without an MCP host.
     """
-    # auth_type="pat" disables auto-detection of the App's service-principal
-    # OAuth env vars; we want this call to run as the *forwarded user*.
-    w = WorkspaceClient(config=Config(host=HOST, token=_user_token.get(), auth_type="pat"))
+    user_token = _user_token.get()
+    if user_token:
+        # auth_type="pat" disables auto-detection of the App's service-principal
+        # OAuth env vars; we want this call to run as the *forwarded user*.
+        w = WorkspaceClient(config=Config(host=HOST, token=user_token, auth_type="pat"))
+    else:
+        # SP fallback — autopopulates from DATABRICKS_CLIENT_ID/SECRET env.
+        w = WorkspaceClient()
     payload = (
         f"Franchise: {franchise}\n"
         f"Recent daily revenue: {trend}\n"
@@ -292,6 +345,33 @@ def _compose_brief_via_fmapi(franchise: str, trend: list[dict], reviews: list[di
 async def _investigate_stream(franchise: str) -> AsyncIterator[str]:
     """Run the full investigation; yield SSE events as each step finishes."""
     try:
+        # Step 0 — show which identity we're running as (transparency)
+        user_token = _user_token.get()
+        user_email = _user_email.get()
+        if user_token:
+            kind, identity, note = (
+                "passthrough",
+                user_email,
+                "Identity passthrough active. UC ACLs and Foundation Model API calls run as you.",
+            )
+        elif user_email != "unknown":
+            kind, identity, note = (
+                "attribution",
+                user_email,
+                f"Running as the App's service principal for execution. Your email ({user_email}) is captured for audit. On Free Edition this is the supported pattern; in paid workspaces with user_authorization enabled the App can run *as you*.",
+            )
+        else:
+            kind, identity, note = (
+                "service-principal",
+                "service-principal",
+                "No user identity was forwarded. Running fully as the App's SP.",
+            )
+        yield _sse("step", {
+            "n": 0, "name": "identity check", "kind": kind,
+            "args": {}, "result": {"identity": identity, "note": note},
+        })
+        await asyncio.sleep(0.1)
+
         # Step 1 — sales trend
         trend = franchise_sales_trend(franchise, days=14)
         yield _sse("step", {

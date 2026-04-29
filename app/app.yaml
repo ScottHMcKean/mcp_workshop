@@ -13,3 +13,10 @@ env:
     value: workspace
   - name: WORKSHOP_SCHEMA
     value: default
+
+# Tell the Apps platform to forward the calling user's identity. Without this,
+# X-Forwarded-Access-Token is never set and the App can only run as its own
+# service principal. Required for the workshop's identity-passthrough story.
+user_authorization:
+  scopes:
+    - all-apis
