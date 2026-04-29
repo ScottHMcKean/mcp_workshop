@@ -2,6 +2,8 @@
 
 A hands-on introduction to **Model Context Protocol (MCP)** for data engineers, data scientists, and analysts. Everything runs **inside your Databricks Free Edition workspace**. No local install required.
 
+The workshop's deployed **Bakehouse Detective App** is the through-line: it serves the lecture deck, hosts a live MCP demonstration you can drive from any browser, and is itself the custom MCP server you'll deploy in Section E. One URL covers Hour 1 through Section E.
+
 ## What you'll do
 
 By the end you will:
@@ -20,14 +22,14 @@ Same scenario across all five sections, dataset is `samples.bakehouse` (preloade
 
 ## Schedule
 
-| Time         | Section                                                        |
-|--------------|----------------------------------------------------------------|
-| 0:00 – 1:00  | **Lecture** — open `docs/lecture.html` in your browser          |
-| 1:00 – 1:25  | [**A. Genie Code + managed MCP**](#section-a--genie-code--managed-mcp) |
-| 1:25 – 1:50  | [**B. AI Playground + managed MCP**](#section-b--ai-playground--managed-mcp) |
-| 1:50 – 2:00  | [**C. External MCP** (discussion-only)](#section-c--external-mcp) |
-| 2:00 – 2:35  | [**D. Notebook deep-dive**](#section-d--notebook-deep-dive)     |
-| 2:35 – 3:00  | [**E. Custom MCP as a Databricks App**](#section-e--custom-mcp-as-a-databricks-app) |
+| Time         | Section                                                        | Where                              |
+|--------------|----------------------------------------------------------------|------------------------------------|
+| 0:00 – 1:00  | **Lecture** + the live demo as a teaser                         | `<App URL>/`                       |
+| 1:00 – 1:25  | [**A. Genie Code + managed MCP**](#section-a--genie-code--managed-mcp) | workspace notebook + sidebar |
+| 1:25 – 1:50  | [**B. AI Playground + managed MCP**](#section-b--ai-playground--managed-mcp) | workspace AI Playground |
+| 1:50 – 2:00  | [**C. External MCP**](#section-c--external-mcp) — you.com walkthrough | workspace UI               |
+| 2:00 – 2:35  | [**D. Notebook deep-dive**](#section-d--notebook-deep-dive)     | workspace notebook                |
+| 2:35 – 3:00  | [**E. Deploy your own copy**](#section-e--custom-mcp-as-a-databricks-app) | Apps UI + Genie Code           |
 
 ## Prerequisites
 
@@ -43,14 +45,18 @@ That's it. Sections A–E run in the workspace UI. (If you'd prefer a CLI deploy
 ├── README.md                  <- you are here
 ├── databricks.yml             <- DAB bundle (notebook + App)
 ├── docs/
-│   ├── lecture.html           <- Hour 1 deck — open in your browser
-│   └── architecture.md        <- production-patterns appendix
+│   ├── architecture.md        <- production-patterns appendix
+│   └── screenshots/           <- README image anchors (drop your PNGs here)
 ├── notebook/
 │   └── mcp_under_the_hood.py  <- Section D notebook (Databricks source format)
 └── app/
-    ├── main.py                <- Section E FastMCP server
+    ├── main.py                <- FastMCP server + landing/lecture/demo routes
     ├── app.yaml
-    └── requirements.txt
+    ├── requirements.txt
+    └── static/
+        ├── index.html         <- /         (landing)
+        ├── lecture.html       <- /lecture  (Hour 1 reveal.js deck)
+        └── demo.html          <- /demo     (live MCP investigation UI)
 ```
 
 ## Deployable artifacts (optional CLI path)
@@ -74,6 +80,20 @@ Some MCP surfaces shipped in March 2026 and Free Edition support is uncertain in
 1. **Genie Code** in the right sidebar of any notebook. If absent, fold Section A into Section B.
 2. **AI Playground → Tools → Add tool → MCP Servers** present. If not, demo SQL Editor's Genie integration in Section B.
 3. **Apps deploy works.** The bundle in this repo deploys cleanly on Free Edition (verified 2026-04-28). Try `databricks bundle run` once before the live event.
+
+---
+
+# Hour 1 — Lecture + Live Demo
+
+> Before the workshop, **deploy the App once** (see Section E). Once it's running, every attendee just visits the App URL. No clones, no downloads, no setup.
+
+The App's landing page (`/`) has three cards:
+
+- **Lecture** (`/lecture`) — the ~36-slide reveal.js deck. Press `s` for speaker notes.
+- **Demo** (`/demo`) — pick a franchise, watch the agent investigate live. Each MCP tool call streams in as a card. This is the workshop's "what is MCP doing?" moment in a single page.
+- **MCP endpoint** (`/mcp`) — the Streamable HTTP MCP server. Genie Code and Playground attach to this in Section E.
+
+End the lecture by clicking **Demo** and running an investigation on Crumbly Creations live. That's the bridge from concept to the rest of the workshop.
 
 ---
 
@@ -330,11 +350,15 @@ By the end you can sketch MCP on a napkin.
 
 # Section E — Custom MCP as a Databricks App
 
-> **25 min.** Deploy a pre-written FastMCP server as a Databricks App, then add it to Genie Code's MCP servers and use it. **No Python written from scratch.**
+> **25 min.** Deploy *your own copy* of the App you've been using all hour — same lecture, same demo, your own MCP server. Add it to Genie Code's MCP servers and use it. **No Python written from scratch.**
 
 ## What you'll deploy
 
-A small FastMCP server (`app/main.py`, ~165 LOC) that adds capabilities the managed servers don't have:
+The same `app/` you've already seen serving the lecture and demo. It's a small FastMCP server (`app/main.py`, ~350 LOC) that:
+
+- Hosts the workshop's static pages (`/`, `/lecture`, `/demo`).
+- Streams a live investigation via SSE at `/demo/investigate`.
+- Exposes an MCP server at `/mcp` with these capabilities the managed servers don't have:
 
 | Tool                    | What it does                                                                            |
 |-------------------------|-----------------------------------------------------------------------------------------|

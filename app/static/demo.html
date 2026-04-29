@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bakehouse Detective — Demo</title>
+  <style>
+    :root { --brand: #ff3621; --ink: #1b3139; --soft: #f6f7f9; --mono: ui-monospace, "SF Mono", Monaco, Menlo, monospace; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; background: var(--soft); color: var(--ink); line-height: 1.5;
+    }
+    header {
+      background: white; border-bottom: 1px solid #e3e6eb; padding: 1rem 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header a { color: var(--ink); text-decoration: none; margin-left: 1rem; font-size: 0.9rem; }
+    header a:hover { color: var(--brand); }
+    main { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; }
+    h1 { margin: 0 0 0.3rem; font-size: 1.9rem; letter-spacing: -0.02em; }
+    .tagline { color: #555; margin: 0 0 2rem; }
+    .controls {
+      background: white; border: 1px solid #e3e6eb; border-radius: 12px;
+      padding: 1.5rem; display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem;
+    }
+    .controls label { font-weight: 600; }
+    .controls select {
+      flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #d2d7de; border-radius: 8px;
+      font-size: 1rem; background: white;
+    }
+    .controls button {
+      background: var(--brand); color: white; border: 0; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    .controls button:hover { filter: brightness(1.05); }
+    .controls button:disabled { background: #ccc; cursor: not-allowed; }
+    #trace { display: grid; gap: 0.85rem; }
+    .step {
+      background: white; border: 1px solid #e3e6eb; border-left: 4px solid var(--brand);
+      border-radius: 8px; padding: 1rem 1.25rem;
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .step .head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .step .num {
+      background: var(--ink); color: white; border-radius: 999px; width: 24px; height: 24px;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 600;
+    }
+    .step .name { font-family: var(--mono); font-size: 1rem; font-weight: 600; color: var(--ink); }
+    .step .kind { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+    .step pre {
+      background: #f6f7f9; border-radius: 6px; padding: 0.7rem 0.9rem; margin: 0.5rem 0 0;
+      font-family: var(--mono); font-size: 0.82rem; overflow-x: auto; max-height: 200px; overflow-y: auto;
+    }
+    .verdict {
+      background: linear-gradient(135deg, #1b3139 0%, #ff3621 120%); color: white;
+      border-radius: 12px; padding: 1.5rem 1.75rem; margin-top: 1.5rem;
+      animation: slideIn 0.4s ease;
+    }
+    .verdict h3 { margin: 0 0 0.5rem; font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85; }
+    .verdict p { margin: 0; font-size: 1.1rem; line-height: 1.55; }
+    .verdict .footnote { margin-top: 1rem; font-size: 0.85rem; opacity: 0.85; font-family: var(--mono); }
+    .error {
+      background: #fff3f1; border: 1px solid #ffd0c8; color: #a8200d; padding: 1rem;
+      border-radius: 8px; font-family: var(--mono); font-size: 0.85rem;
+    }
+    .empty { color: #888; font-style: italic; padding: 1rem; }
+  </style>
+</head>
+<body>
+<header>
+  <strong>🔍 Bakehouse Detective</strong>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/lecture">Lecture</a>
+    <a href="/mcp">MCP endpoint</a>
+  </nav>
+</header>
+
+<main>
+  <h1>Live MCP demonstration</h1>
+  <p class="tagline">Pick a franchise. Watch the agent call each MCP tool, then write its conclusion to a Delta table.</p>
+
+  <div class="controls">
+    <label for="franchise">Franchise:</label>
+    <select id="franchise">
+      <option>Crumbly Creations</option>
+      <option>Tokyo Treats</option>
+      <option>Golden Crumbs</option>
+      <option>Sugar Rush</option>
+      <option>Floured Fantasies</option>
+      <option>Doughy Dreams</option>
+      <option>The Crumbly Nook</option>
+      <option>Kyoto Kravings</option>
+      <option>Butter Babies</option>
+      <option>Sweet Temptations</option>
+    </select>
+    <button id="run">Investigate</button>
+  </div>
+
+  <div id="trace"><div class="empty">No investigation yet. Pick a franchise above and hit Investigate.</div></div>
+  <div id="verdict-slot"></div>
+</main>
+
+<script>
+const trace = document.getElementById('trace');
+const verdictSlot = document.getElementById('verdict-slot');
+const button = document.getElementById('run');
+const select = document.getElementById('franchise');
+
+function clearOutput() {
+  trace.innerHTML = '';
+  verdictSlot.innerHTML = '';
+}
+
+function fmt(obj) {
+  if (typeof obj === 'string') return obj;
+  return JSON.stringify(obj, null, 2);
+}
+
+function appendStep({n, name, kind, args, result}) {
+  const div = document.createElement('div');
+  div.className = 'step';
+  div.innerHTML = `
+    <div class="head">
+      <span class="num">${n}</span>
+      <span class="name">${name}</span>
+      <span class="kind">${kind}</span>
+    </div>
+    ${args ? `<pre>args: ${fmt(args)}</pre>` : ''}
+    <pre>${fmt(result)}</pre>
+  `;
+  trace.appendChild(div);
+}
+
+function showVerdict({brief, logged_to, logged_user}) {
+  verdictSlot.innerHTML = `
+    <div class="verdict">
+      <h3>Verdict</h3>
+      <p>${brief}</p>
+      <div class="footnote">Logged to <code>${logged_to}</code> as <code>${logged_user}</code></div>
+    </div>
+  `;
+}
+
+function showError(msg) {
+  const div = document.createElement('div');
+  div.className = 'error';
+  div.textContent = msg;
+  trace.appendChild(div);
+}
+
+button.addEventListener('click', () => {
+  clearOutput();
+  button.disabled = true;
+  button.textContent = 'Investigating…';
+
+  const franchise = select.value;
+  const es = new EventSource(`/demo/investigate?franchise=${encodeURIComponent(franchise)}`);
+
+  es.addEventListener('step', e => appendStep(JSON.parse(e.data)));
+  es.addEventListener('done', e => {
+    showVerdict(JSON.parse(e.data));
+    es.close();
+    button.disabled = false;
+    button.textContent = 'Investigate';
+  });
+  es.addEventListener('error', e => {
+    if (e.data) showError(`Error: ${e.data}`);
+    else showError('Connection lost. Check the App logs.');
+    es.close();
+    button.disabled = false;
+    button.textContent = 'Investigate';
+  });
+});
+</script>
+</body>
+</html>

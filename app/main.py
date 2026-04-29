@@ -1,12 +1,20 @@
 """
-Bakehouse Detective — a custom MCP server, hosted as a Databricks App.
+Bakehouse Detective — the workshop's all-in-one App.
 
-What it adds on top of the managed MCPs:
-  - A `log_finding` tool that writes investigator conclusions back to a Delta
-    table — something the managed servers don't do.
-  - A `compose_brief` tool that uses **sampling** to call the host's LLM.
-  - A `franchise://list` resource for the host's resource picker.
-  - A `/diagnose_franchise` slash-prompt.
+This single Databricks App serves four things:
+  - GET /            -> a small landing page (static/index.html)
+  - GET /lecture     -> the Hour 1 reveal.js deck (static/lecture.html)
+  - GET /demo        -> a live investigation UI (static/demo.html)
+  - GET /demo/investigate?franchise=X  -> SSE stream that runs the investigation
+                                          step-by-step and emits each MCP tool
+                                          call as it happens
+  - POST/GET /mcp    -> the FastMCP Streamable HTTP endpoint
+  - GET /healthz     -> health check
+
+The MCP tools (`franchise_sales_trend`, `search_reviews`, `compose_brief`,
+`log_finding`) plus a resource (`franchise://list`) and a prompt
+(`/diagnose_franchise`) are exposed both via /mcp (for Genie Code / Playground)
+and via the /demo SSE flow (for the live demo with no MCP host needed).
 
 Identity passthrough: every Databricks call runs as the *calling user* via the
 `X-Forwarded-Access-Token` header that the Apps platform injects.
@@ -14,14 +22,23 @@ Identity passthrough: every Databricks call runs as the *calling user* via the
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from typing import Any
+from pathlib import Path
+from typing import Any, AsyncIterator
 
 from databricks import sql
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.config import Config
+from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from mcp.server.fastmcp import Context, FastMCP
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 # --- Identity passthrough ----------------------------------------------------
 
@@ -219,5 +236,120 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# Mount LAST so /healthz isn't shadowed.
+# --- Static pages: landing, lecture, demo -----------------------------------
+
+@app.get("/", include_in_schema=False)
+def landing() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/lecture", include_in_schema=False)
+def lecture() -> FileResponse:
+    return FileResponse(STATIC_DIR / "lecture.html")
+
+
+@app.get("/demo", include_in_schema=False)
+def demo() -> FileResponse:
+    return FileResponse(STATIC_DIR / "demo.html")
+
+
+# --- SSE investigation endpoint for the demo page ---------------------------
+#
+# Same tools as the MCP server, but called server-side so we can stream each
+# step to the browser without an MCP host (Genie Code / Playground) being
+# involved. This makes the demo work even on workspaces where Genie Code's
+# MCP UI isn't available yet.
+
+def _sse(event: str, data: Any) -> str:
+    # default=str so dates/datetimes/decimals from SQL serialize cleanly.
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+def _compose_brief_via_fmapi(franchise: str, trend: list[dict], reviews: list[dict]) -> str:
+    """
+    Same shape as the MCP `compose_brief` tool, but calls Foundation Model APIs
+    directly instead of using sampling — needed because the demo runs server-
+    side without an MCP host.
+    """
+    # auth_type="pat" disables auto-detection of the App's service-principal
+    # OAuth env vars; we want this call to run as the *forwarded user*.
+    w = WorkspaceClient(config=Config(host=HOST, token=_user_token.get(), auth_type="pat"))
+    payload = (
+        f"Franchise: {franchise}\n"
+        f"Recent daily revenue: {trend}\n"
+        f"Related reviews: {reviews}\n\n"
+        "Write ONE paragraph diagnosing what's wrong, leading with the most "
+        "likely hypothesis and citing specific evidence."
+    )
+    response = w.serving_endpoints.query(
+        name=os.environ.get("WORKSHOP_LLM", "databricks-meta-llama-3-3-70b-instruct"),
+        messages=[ChatMessage(role=ChatMessageRole.USER, content=payload)],
+        max_tokens=400,
+    )
+    return response.choices[0].message.content
+
+
+async def _investigate_stream(franchise: str) -> AsyncIterator[str]:
+    """Run the full investigation; yield SSE events as each step finishes."""
+    try:
+        # Step 1 — sales trend
+        trend = franchise_sales_trend(franchise, days=14)
+        yield _sse("step", {
+            "n": 1, "name": "franchise_sales_trend", "kind": "tools/call (SQL)",
+            "args": {"franchise": franchise, "days": 14},
+            "result": trend,
+        })
+        await asyncio.sleep(0.1)
+
+        # Step 2 — reviews
+        keyword = franchise.split()[0]
+        reviews = search_reviews(keyword, limit=3)
+        yield _sse("step", {
+            "n": 2, "name": "search_reviews", "kind": "tools/call (SQL)",
+            "args": {"query_substring": keyword, "limit": 3},
+            "result": reviews,
+        })
+        await asyncio.sleep(0.1)
+
+        # Step 3 — brief via Foundation Model APIs (sampling-equivalent)
+        brief = _compose_brief_via_fmapi(franchise, trend, reviews)
+        yield _sse("step", {
+            "n": 3, "name": "compose_brief", "kind": "tools/call (sampling → FMAPI)",
+            "args": {"franchise": franchise},
+            "result": brief,
+        })
+        await asyncio.sleep(0.1)
+
+        # Step 4 — log finding
+        finding = log_finding(
+            franchise,
+            hypothesis="isolated single-day operational anomaly",
+            evidence=brief[:500],
+        )
+        yield _sse("step", {
+            "n": 4, "name": "log_finding", "kind": "tools/call (Delta write)",
+            "args": {"franchise": franchise, "hypothesis": "...", "evidence": "..."},
+            "result": finding,
+        })
+
+        # Done
+        yield _sse("done", {
+            "brief": brief,
+            "logged_to": FINDINGS_TABLE,
+            "logged_user": _user_email.get(),
+        })
+    except Exception as e:
+        yield _sse("error", str(e))
+
+
+@app.get("/demo/investigate")
+async def demo_investigate(franchise: str) -> StreamingResponse:
+    return StreamingResponse(
+        _investigate_stream(franchise),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# Mount LAST so explicit routes aren't shadowed.
 app.mount("/", mcp.streamable_http_app())
