@@ -1,6 +1,6 @@
 # MCP on Databricks — A 3-Hour Workshop
 
-A hands-on introduction to **Model Context Protocol (MCP)** for data engineers, data scientists, and analysts. Everything runs **inside your Databricks Free Edition workspace**. No local install. No leaving the browser (except one optional `databricks bundle deploy` for Section E).
+A hands-on introduction to **Model Context Protocol (MCP)** for data engineers, data scientists, and analysts. Everything runs **inside your Databricks Free Edition workspace**. No local install required.
 
 ## What you'll do
 
@@ -33,7 +33,8 @@ Same scenario across all five sections, dataset is `samples.bakehouse` (preloade
 
 1. **Databricks Free Edition workspace** — sign up at https://www.databricks.com/learn/free-edition.
 2. A web browser.
-3. *(Section E only)* the **Databricks CLI** locally — `brew install databricks` or see the docs. Used for `databricks bundle deploy`.
+
+That's it. Sections A–E run in the workspace UI. (If you'd prefer a CLI deploy in Section E, the repo ships a `databricks.yml` bundle — but the primary path is UI.)
 
 ## Repo layout
 
@@ -52,9 +53,9 @@ Same scenario across all five sections, dataset is `samples.bakehouse` (preloade
     └── requirements.txt
 ```
 
-## Deployable artifacts
+## Deployable artifacts (optional CLI path)
 
-Everything that *can* be code-deployed is in the bundle:
+For attendees comfortable with the Databricks CLI, the repo ships a bundle that wraps both Section D's notebook and Section E's App:
 
 ```bash
 databricks bundle validate -p <profile>
@@ -62,7 +63,7 @@ databricks bundle deploy   -p <profile>     # uploads notebook + registers App
 databricks bundle run bakehouse_detective -p <profile>   # starts the App
 ```
 
-Not in the bundle: Genie Code wiring, Playground tool config, external MCP URLs, the lecture HTML. Those are workspace-UI or local-browser concerns.
+Edit `databricks.yml` to point `targets.free.workspace.host` and `var.warehouse_id` at your workspace before running. The UI paths in Sections D and E produce the same result.
 
 ---
 
@@ -84,7 +85,11 @@ Genie Code (released March 2026, replaced Databricks Assistant) is the chat side
 
 ## Step 1 — Look at what's already wired (3 min)
 
-Top-left → **Agents** → **MCP Servers**. You should see at least:
+In the workspace, **top-left nav → Agents → MCP Servers**:
+
+![Agents → MCP Servers panel](docs/screenshots/agents-mcp-servers-panel.png)
+
+You should see at least:
 
 | Server                  | What it does                                                                                       |
 |-------------------------|----------------------------------------------------------------------------------------------------|
@@ -94,7 +99,9 @@ Top-left → **Agents** → **MCP Servers**. You should see at least:
 
 These are **managed** servers — Databricks operates them, your workspace identity authorizes you, no setup.
 
-> **Heads up — 20-tool cap.** A host session can attach at most 20 tools across all MCP servers.
+Now open any notebook and look at the right sidebar — Genie Code is the small chat icon:
+
+![Genie Code in the notebook sidebar](docs/screenshots/genie-code-sidebar.png)
 
 ## Step 2 — Genie Code knows about `samples.bakehouse` (5 min)
 
@@ -128,6 +135,8 @@ The model has to be creative without semantic search. We'll fix that with a cust
 
 Watch the trace expand: SQL on `sales_transactions` for that day, SQL on reviews, model synthesizing. Likely outcome: *"isolated single-day operational issue — closure or POS outage"*, **not** a sustained slump.
 
+![Genie Code response with trace expanded](docs/screenshots/genie-code-trace.png)
+
 ## Discussion (5 min)
 
 1. **Tool selection.** Re-read 2 of the traces — was the choice obvious from the prompts?
@@ -141,6 +150,8 @@ Watch the trace expand: SQL on `sales_transactions` for that day, SQL on reviews
 
 Top-left → **Machine Learning** → **AI Playground**. Pick a tool-capable model. **Tools → + Add tool → MCP Servers**.
 
+![Playground Tools dropdown with MCP Servers option](docs/screenshots/playground-tools-add.png)
+
 ## Step 1 — Attach the managed servers (3 min)
 
 In Tools → Add tool → MCP Servers, attach:
@@ -148,7 +159,9 @@ In Tools → Add tool → MCP Servers, attach:
 - **Vector Search**
 - **Genie Spaces** → "Bakehouse Sales Starter Space"
 
-Apply. Tool count appears in the panel. Remember: 20-tool cap.
+Apply. Tool count appears in the panel.
+
+> **Heads up — 20-tool cap.** A host session can attach at most 20 tools across all MCP servers. Don't connect every Genie Space and every UC schema.
 
 ## Step 2 — Same first question, watch the trace (5 min)
 
@@ -166,6 +179,8 @@ tool_result
 ```
 
 **This is what Genie Code did silently.** Same wire calls.
+
+![Playground trace showing tools/call JSON](docs/screenshots/playground-trace.png)
 
 ## Step 3 — Genie Space tool with arguments visible (7 min)
 
@@ -208,48 +223,73 @@ Re-ask the May-8 question. The trace changes — more tool calls, more grounding
 
 # Section C — External MCP
 
-> **10 min, discussion-only.** No hands-on. We talk through what an *external* MCP is and why we're not adding one live.
+> **10 min.** A worked walkthrough wiring up **you.com** as an external MCP — same dialog, same protocol as the managed servers, just an internet URL instead of a Databricks one.
 
 ## What "external" means
 
 An MCP server you don't operate, accessed over **Streamable HTTP**:
 
 - **you.com**, **Brave** — web search
-- **GitHub** — repo issues, PRs, file reads
-- **Slack, Notion, Linear, Confluence** — first-party MCPs
+- **GitHub**, **GitLab** — repo issues, PRs, file reads
+- **Slack, Notion, Linear, Confluence** — first-party MCPs from those vendors
 - A growing **Databricks Marketplace** category for MCP listings
 
-To Genie Code or Playground, these are no different from the managed servers. Same protocol, different URL.
+To Genie Code or Playground, these are no different from managed servers. Same protocol, different URL.
 
-## How you'd add one
+## Step 1 — Get a free you.com key (~2 min)
 
-In the workspace UI: **Agents → MCP Servers → + Add → External MCP**. Provide:
-- **Name** (free text)
-- **URL** (the server's Streamable HTTP endpoint)
-- **Auth** — usually OAuth 2.1 (workspace negotiates) or a Bearer header you supply
+1. Visit https://api.you.com.
+2. Sign up — free tier, no credit card required.
+3. Generate an API key. Keep it for Step 3.
 
-Caveat: Databricks doesn't currently support *dynamic client registration* for OAuth — the external server must be pre-registered as a known app. For paid SaaS MCPs this is fine; for hobby servers it's friction.
+If you'd rather not sign up live, watch the instructor's screencap and skip ahead — the dialog is the value, the key is replaceable.
 
-## Why we're not doing it live
+## Step 2 — Open the Add External MCP dialog
 
-1. No reliable no-auth public MCP that's both useful and stable enough for a 10-min slot.
-2. Workshop time is better spent on Sections D and E.
-3. The *concept* is the value here — you've already seen the same protocol in Sections A and B.
+In the workspace: **Agents → MCP Servers → + Add → External MCP**.
 
-## Three things to try after the workshop
+![Add External MCP dialog](docs/screenshots/add-external-mcp-dialog.png)
 
-1. **you.com** — sign up at https://api.you.com (free tier), generate a key, add as an external MCP, then ask Genie Code something like *"Use you-search to find any 2026 news about Austin's coffee shop competitive landscape."*
-2. **Browse Databricks Marketplace** — search for "MCP" in the in-workspace marketplace listings.
-3. **A first-party SaaS MCP for a tool your team uses** — Notion, GitHub, Linear, Slack. Most have official MCP servers.
+## Step 3 — Fill in the form (~2 min)
 
-## Why this matters for governance
+| Field         | Value                                                            |
+|---------------|------------------------------------------------------------------|
+| **Name**      | `you-search`                                                     |
+| **URL**       | `https://mcp.you.com/v1`                                          |
+| **Auth**      | Bearer header → `Authorization: Bearer <your-key>`                |
 
-Every external MCP is a new trust surface:
-- **Where does the data go?** A `you-search` call sends your prompt to you.com.
-- **Can the model leak via tool args?** Audit your traces.
-- **Is the auth scope right?** Scope GitHub tokens to read-only / specific orgs.
+![Filled-in form](docs/screenshots/external-mcp-form-filled.png)
 
-In Databricks, the MCP server is configured by an admin; per-user access can be governed.
+Hit **Connect**. After a few seconds the panel should show `you-search` Connected with a tool count:
+
+![you-search connected](docs/screenshots/external-mcp-connected.png)
+
+> **Caveat.** Databricks doesn't currently support *dynamic client registration* for OAuth — the external server must be pre-registered as a known app. For paid SaaS MCPs this is fine; for hobby servers it's friction. you.com works because they pre-registered.
+
+## Step 4 — Drive it (~3 min)
+
+In Genie Code, ask:
+
+> *"Use you-search to find any 2026 news about Austin's coffee shop competitive landscape. Then combine that with the bakehouse data and refine your hypothesis about the May 8 anomaly at Crumbly Creations."*
+
+![Trace showing you-search call](docs/screenshots/you-search-trace.png)
+
+Notice in the trace: the model ran `you-search` first, then went back to UC SQL on `samples.bakehouse`, then synthesized. **External MCP and managed MCP composed in a single agent turn.** Same trace shape; some calls hit the public internet, some stayed in your workspace.
+
+## Discussion (~3 min)
+
+Every external MCP is a new trust surface. Things to think about before adding one for your team:
+
+- **Where does the data go?** A `you-search` call sends your prompt to you.com. Is that OK for your team's policy?
+- **Can the model leak via tool args?** A naive agent might paste customer data into a web search. Audit your traces.
+- **Is the auth scope right?** A GitHub MCP wired with a full org PAT gives the agent everything. Scope it down.
+
+In Databricks, MCP servers are configured by an admin; per-user access is governed in *Agents → MCP Servers*.
+
+## Try after the workshop
+
+- Browse the in-workspace **Marketplace** for the MCP category (in public preview as of April 2026).
+- Wire a first-party SaaS MCP for something your team already uses — Notion, GitHub, Slack. Most major SaaS vendors ship one.
 
 ---
 
@@ -320,7 +360,37 @@ Open `app/main.py`. Six call-out points:
 
 `app/app.yaml` is 8 lines: binds a SQL warehouse, sets two env vars, runs uvicorn.
 
-## Step 2 — Deploy with Databricks Asset Bundles (8 min)
+## Step 2 — Deploy via the Apps UI (8 min) — *the primary path*
+
+In the workspace:
+
+1. **Compute → Apps → Create app**.
+
+   ![Compute → Apps → Create app](docs/screenshots/apps-create.png)
+
+2. **Source code path** → import the `app/` directory from this repo. Two ways:
+   - **From a Git URL** (easiest): paste the repo URL, set the path to `app/`.
+   - **From workspace files**: clone the repo into a Git Folder, point the App at `<workspace>/mcp_workshop/app/`.
+
+3. **Resources** → add the Serverless SQL Warehouse with binding name `warehouse_id` (this matches `app.yaml`).
+
+   ![App configuration form](docs/screenshots/apps-config-form.png)
+
+4. **Deploy**. Wait ~3–5 min for the build.
+
+5. When status flips to `Running`, copy the **App URL** — something like `https://bakehouse-detective-mcp-<id>.aws.databricksapps.com`.
+
+   ![App in RUNNING state](docs/screenshots/apps-running.png)
+
+Sanity check (open the URL in your browser and add `/healthz`):
+
+```
+{"status": "ok"}
+```
+
+### Alternative: deploy with Databricks Asset Bundles
+
+If you have the Databricks CLI configured, the repo ships a `databricks.yml` that registers the same App:
 
 ```bash
 databricks bundle validate -p <your-profile>
@@ -328,26 +398,13 @@ databricks bundle deploy   -p <your-profile>     # uploads source + registers Ap
 databricks bundle run bakehouse_detective -p <your-profile>   # starts compute + deploys code
 ```
 
-When `bundle run` says *"App started successfully"*, copy the URL — `https://bakehouse-detective-mcp-<id>.aws.databricksapps.com`.
-
-Per-target overrides live in `databricks.yml` under `targets:`. The shipped config defaults to a Free Edition workspace; set `var.warehouse_id` and `workspace.host` to match yours.
-
-Quick sanity:
-
-```bash
-curl <App URL>/healthz   # expect {"status": "ok"}
-```
-
-### Fallback: deploy via the Apps UI
-
-1. **Compute → Apps → Create app**.
-2. **Source code path:** import `app/` from this repo (Git URL or workspace files).
-3. **Resources:** bind the Serverless SQL warehouse with binding name `warehouse_id`.
-4. **Deploy**. Copy the App URL.
+Edit `databricks.yml` under `targets:` to set `var.warehouse_id` and `workspace.host` to your workspace before running. Faster on re-deploys; same result as the UI path.
 
 ## Step 3 — Add the App to Genie Code (5 min)
 
 **Agents → MCP Servers → + Add → Custom Databricks App** → pick `bakehouse-detective-mcp`. Test connection. You should see **4 tools, 1 resource, 1 prompt**.
+
+![Add the App as a custom MCP server](docs/screenshots/add-app-as-mcp.png)
 
 If "Custom Databricks App" isn't a dropdown option, fall back to **+ Add → External MCP** with `<App URL>/mcp` as the URL — same result.
 
@@ -363,11 +420,15 @@ Watch:
 - `compose_brief` calls back to the host's LLM via **sampling** — you'll see a nested `sampling/createMessage` request in the trace.
 - `log_finding` writes a row to `workspace.default.findings`.
 
-Verify:
+![Genie Code calling the deployed App](docs/screenshots/genie-code-using-custom-app.png)
+
+Verify in the SQL Editor:
 
 ```sql
 SELECT * FROM workspace.default.findings ORDER BY ts DESC LIMIT 5
 ```
+
+![findings row in SQL Editor](docs/screenshots/findings-row.png)
 
 `user_email` populated as **you** — identity passthrough working.
 

@@ -156,6 +156,20 @@ await use_things()
 # MAGIC Here's the magic. The server can ask "please run this on your model" — and it gets a completion back without ever having an API key.
 # MAGIC
 # MAGIC We define a new tool `summarize_menu` that uses sampling. The notebook plays the *host* — when the server asks "summarize this with your LLM," we call the **Databricks Foundation Model API** (already available in Free Edition).
+# MAGIC
+# MAGIC ### What you should see when this works
+# MAGIC
+# MAGIC One line of LLM-generated text describing today's menu. Something like *"Treat yourself today with our buttery croissants, fresh sourdough, chewy cookies, and chewy bagels — all baked with love!"*
+# MAGIC
+# MAGIC ### What might go wrong
+# MAGIC
+# MAGIC | Error                                              | Likely cause                                                                                          | Fix                                                                       |
+# MAGIC |----------------------------------------------------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+# MAGIC | `ResourceDoesNotExist` / `model not found`          | `MODEL_NAME` isn't on your workspace.                                                                 | Open **Machine Learning → Serving** and pick a serving endpoint that exists. |
+# MAGIC | `ImportError: cannot import name 'CreateMessage...'` | `mcp` SDK version mismatch.                                                                            | The first cell pinned `mcp>=1.2`. Re-run cell 1 + restart Python.          |
+# MAGIC | Auth error                                          | `WorkspaceClient()` should pick up your notebook's identity. If it doesn't, this is workspace config. | Skip this cell — cells 2–4 already proved the protocol.                   |
+# MAGIC
+# MAGIC If anything fails: read the error, then move on to cell 6. The protocol story is intact.
 
 # COMMAND ----------
 
@@ -275,7 +289,23 @@ await elicit_demo()
 # MAGIC
 # MAGIC Same client code, different transport. We point at the workspace's managed MCP endpoint — the one Genie Code and Playground use behind the scenes — over **Streamable HTTP** with workspace OAuth.
 # MAGIC
-# MAGIC > **Note:** the exact path may differ as the surface evolves. As of April 2026 the managed MCP endpoint pattern is `/api/2.0/mcp/<server-kind>`. If this cell errors, that's fine — the rest of the notebook still demonstrates the protocol fully.
+# MAGIC ### Heads up — this cell is the most likely to fail
+# MAGIC
+# MAGIC The managed MCP endpoint URL pattern (`/api/2.0/mcp/<server-kind>`) is documented but evolves. The cell is wrapped in a try/except so a failure here doesn't crash the notebook.
+# MAGIC
+# MAGIC ### What you should see when this works
+# MAGIC
+# MAGIC A list of up to 5 tool names from the managed Genie MCP server, like `genie__01f1...__query` (one per Genie Space you can read). The point: the *exact same client code* from cells 3–4 talks to a real Databricks-hosted MCP endpoint.
+# MAGIC
+# MAGIC ### What might go wrong
+# MAGIC
+# MAGIC | Error                              | Why                                                              | What to do                                                |
+# MAGIC |------------------------------------|------------------------------------------------------------------|-----------------------------------------------------------|
+# MAGIC | `404 Not Found`                     | Endpoint path differs on your workspace.                         | Skip this cell. Cells 2–6 already proved the protocol.    |
+# MAGIC | `401 / 403`                         | Token from `WorkspaceClient` doesn't have MCP audience.          | Skip this cell. Try calling the same MCP from Genie Code (Section A) instead. |
+# MAGIC | `streamablehttp_client` import fails | `mcp` SDK version mismatch.                                      | Re-run cell 1 + restart Python.                            |
+# MAGIC
+# MAGIC **The "right" answer if this errors: shrug, move on.** Cells 2–6 are the load-bearing ones for the workshop.
 
 # COMMAND ----------
 
