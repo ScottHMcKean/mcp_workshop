@@ -25,12 +25,16 @@ variables:
     description: Schema where `findings` lives.
     default: default
 
-# Sync only the things the workspace actually needs. The READMEs and lecture
-# stay local — there's no need to clutter the workspace with them.
+# Sync the App's runtime files (app/) and Section D notebook. The lecture +
+# demo HTML lives in `docs/` (canonical, GitHub-Pages-friendly) and is
+# referenced from `app/static/` via symlinks — `databricks bundle deploy`
+# resolves those symlinks at upload time so the App container sees real files.
 sync:
   include:
     - notebook/mcp_under_the_hood.py
     - app/**
+    - docs/intro-deck.html
+    - docs/demo.html
 
 resources:
   apps:

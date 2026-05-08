@@ -5,6 +5,8 @@
 .vscode/
 .mcp.json
 .github/skills/
+.databricks/
+.github/
 
 # macOS
 .DS_Store

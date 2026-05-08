@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP on Databricks — Workshop</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Source+Code+Pro:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #F5F5F0;
+    --white: #FFFFFF;
+    --gray-900: #1B1F24;
+    --gray-700: #3B3F46;
+    --gray-500: #6B7280;
+    --gray-300: #D1D5DB;
+    --gray-100: #EDEEE9;
+    --red: #FF3621;
+    --red-light: rgba(255, 54, 33, 0.08);
+    --red-dark: #E0311D;
+    --green: #00A972;
+    --amber: #E88C30;
+    --teal: #00B4D8;
+    --font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'Source Code Pro', 'SF Mono', monospace;
+  }
+
+  html { scroll-snap-type: y mandatory; overflow-y: scroll; font-size: 17px; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--gray-900);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Slides ── */
+  .slide {
+    scroll-snap-align: start;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 5vh 10vw;
+    position: relative;
+    overflow: hidden;
+  }
+  .slide.pad-top {
+    justify-content: flex-start;
+    padding-top: 6vh;
+  }
+
+  /* ── Brand mark (top-left on every slide) ── */
+  .brand {
+    position: absolute;
+    top: 1.75rem;
+    left: 2.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--gray-700);
+    z-index: 10;
+  }
+  .brand-mark {
+    width: 14px; height: 14px;
+    background: var(--red);
+    border-radius: 2px;
+    transform: rotate(45deg);
+  }
+  .slide.red-bg .brand { color: rgba(255,255,255,0.9); }
+  .slide.red-bg .brand-mark { background: white; }
+
+  /* ── Dot nav (right edge) ── */
+  .dot-nav {
+    position: fixed;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    z-index: 200;
+  }
+  .dot-nav a {
+    display: block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--gray-300);
+    transition: background 0.25s, transform 0.25s;
+    border: none;
+  }
+  .dot-nav a.active { background: var(--red); transform: scale(1.4); }
+
+  /* ── Red divider slides ── */
+  .slide.red-bg {
+    background: var(--red);
+    color: white;
+  }
+
+  /* ── Typography ── */
+  .hero-title {
+    font-size: clamp(3.2rem, 6vw, 5.5rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+  }
+  .hero-sub {
+    font-size: clamp(1.2rem, 1.8vw, 1.65rem);
+    color: var(--gray-500);
+    margin-top: 1.5rem;
+    max-width: 70%;
+    line-height: 1.5;
+  }
+  .hero-meta {
+    margin-top: 2.5rem;
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+    color: var(--gray-700);
+  }
+  .hero-meta span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .hero-meta strong { color: var(--gray-900); font-weight: 700; }
+  .disclaimer {
+    position: absolute;
+    bottom: 2rem;
+    left: 2.5rem;
+    font-size: 0.78rem;
+    color: var(--gray-500);
+  }
+  .slide-title {
+    font-size: clamp(2.2rem, 3.5vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.75rem;
+  }
+  .slide-lead {
+    font-size: clamp(1.05rem, 1.4vw, 1.3rem);
+    color: var(--gray-500);
+    border-left: 3px solid var(--red);
+    padding-left: 1rem;
+    margin-bottom: 2rem;
+    max-width: 75%;
+    line-height: 1.5;
+  }
+  .section-num {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.8;
+    margin-bottom: 0.75rem;
+  }
+  .divider-title {
+    font-size: clamp(3rem, 5.5vw, 5rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    max-width: 800px;
+  }
+  .divider-sub {
+    font-size: clamp(1.15rem, 1.5vw, 1.5rem);
+    opacity: 0.85;
+    max-width: 65%;
+    margin-top: 1.5rem;
+    line-height: 1.5;
+  }
+
+  /* ── Cards ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    flex: 1;
+    align-content: center;
+  }
+  .card-grid.two { grid-template-columns: 1fr 1fr; }
+  .card-grid.four { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--gray-100);
+    border-radius: 10px;
+    padding: 1.5rem 1.6rem;
+  }
+  .card h3 { font-size: clamp(1.05rem, 1.3vw, 1.3rem); font-weight: 700; margin-bottom: 0.5rem; }
+  .card p { font-size: clamp(0.9rem, 1vw, 1.05rem); color: var(--gray-500); line-height: 1.55; }
+  .card .card-icon { font-size: clamp(1.4rem, 1.8vw, 1.8rem); margin-bottom: 0.6rem; }
+  .card code {
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--red-dark);
+    background: var(--red-light);
+    padding: 0.08rem 0.32rem;
+    border-radius: 3px;
+  }
+  .card .who {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.18rem 0.5rem;
+    border-radius: 3px;
+    margin-bottom: 0.6rem;
+  }
+  .card .who.model { background: var(--red-light); color: var(--red); }
+  .card .who.app   { background: rgba(0,169,114,0.12); color: var(--green); }
+  .card .who.user  { background: rgba(232,140,48,0.14); color: var(--amber); }
+
+  /* ── Tables ── */
+  .signal-table, .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: clamp(0.95rem, 1.1vw, 1.12rem);
+  }
+  .signal-table th, .compare-table th {
+    text-align: left;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    padding: 0.8rem 0.9rem;
+    border-bottom: 2px solid var(--gray-300);
+  }
+  .signal-table td, .compare-table td {
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid var(--gray-100);
+    vertical-align: top;
+  }
+  .compare-table tr:hover td { background: var(--red-light); }
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+  }
+  .dot.red { background: var(--red); }
+  .dot.green { background: var(--green); }
+  .dot.amber { background: var(--amber); }
+  .step-num {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--red);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 0.4rem;
+  }
+  .highlight-col { color: var(--red); font-weight: 600; }
+  td code, th code {
+    font-family: var(--mono); font-size: 0.82rem;
+    color: var(--red-dark);
+    background: var(--red-light);
+    padding: 0.08rem 0.32rem;
+    border-radius: 3px;
+  }
+
+  /* ── Arch boxes ── */
+  .arch-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.25rem;
+    flex: 1;
+    align-content: start;
+  }
+  .arch-row.three { grid-template-columns: repeat(3, 1fr); }
+  .arch-box {
+    background: var(--white);
+    border: 1px solid var(--gray-100);
+    border-radius: 10px;
+    padding: 1.75rem;
+  }
+  .arch-box h3 { font-size: clamp(1.15rem, 1.5vw, 1.5rem); font-weight: 700; margin-bottom: 0.3rem; }
+  .arch-tag {
+    display: inline-block;
+    font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    margin-bottom: 0.6rem;
+  }
+  .arch-tag.managed  { background: var(--red-light); color: var(--red); }
+  .arch-tag.external { background: rgba(232,140,48,0.14); color: var(--amber); }
+  .arch-tag.custom   { background: rgba(0,169,114,0.12); color: var(--green); }
+  .arch-tag.host     { background: rgba(0,180,216,0.12); color: var(--teal); }
+  .arch-box ul { list-style: none; padding: 0; }
+  .arch-box li {
+    font-size: clamp(0.9rem, 1vw, 1.05rem); color: var(--gray-700);
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .arch-box li:last-child { border: none; }
+  .arch-box li strong { color: var(--gray-900); }
+  .arch-box code {
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--red-dark);
+    background: var(--red-light);
+    padding: 0.08rem 0.32rem;
+    border-radius: 3px;
+  }
+  .arch-box p.lede {
+    font-size: 0.88rem; color: var(--gray-500);
+    margin-bottom: 0.85rem; line-height: 1.5;
+  }
+  .engine-callout {
+    margin-top: 1.25rem;
+    padding: 0.85rem 1.25rem;
+    border: 1px dashed var(--red);
+    border-radius: 8px;
+    background: var(--red-light);
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--gray-700);
+  }
+  .engine-callout code {
+    font-family: var(--mono);
+    color: var(--red-dark);
+    font-weight: 500;
+  }
+
+  /* ── Infra row ── */
+  .infra-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    margin-top: 1.25rem;
+  }
+  .infra-card {
+    background: var(--white);
+    border: 1px solid var(--gray-100);
+    border-radius: 10px;
+    padding: 1.5rem 1.4rem;
+    text-align: center;
+  }
+  .infra-card .ii {
+    width: 44px; height: 44px;
+    margin: 0 auto 0.7rem;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+  .infra-card .ii.uc { background: var(--red-light); }
+  .infra-card .ii.app { background: rgba(0,169,114,0.12); }
+  .infra-card .ii.fm { background: rgba(232,140,48,0.14); }
+  .infra-card h4 { font-size: 1.02rem; font-weight: 700; margin-bottom: 0.3rem; }
+  .infra-card p { font-size: 0.88rem; color: var(--gray-500); line-height: 1.5; }
+
+  /* ── Code blocks ── */
+  .code-block {
+    background: var(--gray-900);
+    color: #e2e8f0;
+    font-family: var(--mono);
+    font-size: clamp(0.78rem, 0.95vw, 0.95rem);
+    padding: 1.4rem 1.6rem;
+    border-radius: 8px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin-top: 1rem;
+    white-space: pre;
+  }
+  .code-block .comment { color: #6B7280; }
+  .code-block .keyword { color: #f472b6; }
+  .code-block .str { color: #22c55e; }
+  .code-block .fn { color: #38bdf8; }
+  .code-block .arrow { color: var(--red); }
+
+  /* ── CTA button ── */
+  .cta {
+    display: inline-block;
+    padding: 0.75rem 1.8rem;
+    background: var(--red);
+    color: white;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+  .cta:hover { background: var(--red-dark); }
+  .cta.outline {
+    background: transparent;
+    color: var(--red);
+    border: 1.5px solid var(--red);
+    margin-left: 0.75rem;
+  }
+  .cta.outline:hover { background: var(--red-light); }
+
+  /* ── Keyboard hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    color: var(--gray-300);
+    z-index: 200;
+    pointer-events: none;
+    transition: opacity 0.5s;
+  }
+
+  @media (max-width: 768px) {
+    .slide { padding: 3rem 1.5rem; }
+    .card-grid, .card-grid.two, .card-grid.four,
+    .arch-row, .arch-row.three, .infra-row { grid-template-columns: 1fr; }
+    .dot-nav { display: none; }
+    .hero-title { font-size: 2rem; }
+    .slide-lead, .hero-sub, .divider-sub { max-width: 100%; }
+    .brand { top: 1rem; left: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Dot nav -->
+<div class="dot-nav" id="dot-nav"></div>
+
+<!-- Keyboard hint -->
+<div class="key-hint" id="key-hint">&#8595; scroll or press arrow keys</div>
+
+<!-- ═══════════ SLIDE 1: HERO ═══════════ -->
+<div class="slide" id="s0">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <h1 class="hero-title">MCP on Databricks</h1>
+  <p class="hero-sub">
+    A 3-hour hands-on workshop. One scenario, five sections, all in your workspace.
+    Browser-only — no CLI, no local Python, no clones.
+  </p>
+  <div class="hero-meta">
+    <span><strong>Audience:</strong>&nbsp;Data engineers, scientists, analysts</span>
+    <span><strong>Stack:</strong>&nbsp;Free Edition · Genie Code · Playground · Apps</span>
+    <span><strong>Repo:</strong>&nbsp;<code style="font-family:var(--mono);font-size:0.85rem">scott-mckean/mcp_workshop</code></span>
+  </div>
+  <p class="disclaimer">Workshop deck · Hour 1 · Press &darr;/&rarr; to advance.</p>
+</div>
+
+<!-- ═══════════ SLIDE 2: THE SCENARIO ═══════════ -->
+<div class="slide pad-top" id="s1">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">The Bakehouse Detective</div>
+  <p class="slide-lead">
+    On <strong>2024-05-08</strong>, Crumbly Creations — the Austin franchise of our bakery chain —
+    took only <strong>$6</strong> in revenue. Find out why.
+  </p>
+  <table class="signal-table">
+    <thead>
+      <tr><th style="width:22%">Source</th><th>What it gives you</th><th style="width:22%">MCP server we'll use</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>sales_transactions</code></td>
+        <td>3,333 rows. May 1 &rarr; May 17, 2024. The $6 day is real.</td>
+        <td>Genie Spaces (managed)</td>
+      </tr>
+      <tr>
+        <td><code>media_customer_reviews</code></td>
+        <td>204 reviews, ~6 tagged to Austin. Free-text. Search them semantically.</td>
+        <td>Vector Search (managed)</td>
+      </tr>
+      <tr>
+        <td><code>sales_franchises</code></td>
+        <td>48 franchises with city / district / lat-lon. Joins and filters.</td>
+        <td>UC Functions (managed)</td>
+      </tr>
+      <tr>
+        <td>The wider web</td>
+        <td>Was anything happening in Austin that day? Outage, weather, road closure?</td>
+        <td>External MCP (you.com)</td>
+      </tr>
+      <tr>
+        <td>Your own brain</td>
+        <td>One-paragraph hypothesis with citations. Logged to Delta for the audit trail.</td>
+        <td><code>bakehouse-detective</code> (custom App)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ SLIDE 3: DIVIDER — FUNDAMENTALS ═══════════ -->
+<div class="slide red-bg" id="s2">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="section-num">Section 1</div>
+  <h2 class="divider-title">What is MCP, and why now?</h2>
+  <p class="divider-sub">
+    The Model Context Protocol is a JSON-RPC contract between AI hosts and the tools, data,
+    and workflows they reach for. It is not a model and not a runtime — it is the wire.
+  </p>
+</div>
+
+<!-- ═══════════ SLIDE 4: N×M PROBLEM ═══════════ -->
+<div class="slide pad-top" id="s3">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">From N&times;M to N+M</div>
+  <p class="slide-lead">
+    Before MCP, every host re-implemented every integration. After MCP, hosts and servers
+    speak one protocol — the same shape that let LSP unify editors and language servers.
+  </p>
+  <div class="arch-row">
+    <div class="arch-box">
+      <span class="arch-tag external">Before</span>
+      <h3>N&times;M glue code</h3>
+      <p class="lede">Each host built its own connectors to GitHub, Slack, your warehouse, your vector store.</p>
+      <div class="code-block" style="margin-top:0.5rem;font-size:0.78rem">Cursor          &#9472;&#9488;
+Claude Desktop  &#9500;&#9472;&#9472;&rarr; build all integrations
+Genie Code      &#9500;&#9472;&#9472;&rarr; for every host, separately
+your agent      &#9472;&#9496;</div>
+    </div>
+    <div class="arch-box">
+      <span class="arch-tag custom">After</span>
+      <h3>N + M servers</h3>
+      <p class="lede">Each host implements MCP once. Each tool ships an MCP server once. They compose.</p>
+      <div class="code-block" style="margin-top:0.5rem;font-size:0.78rem">Genie Code   &#9472;&#9488;
+Playground   &#9500;&#9472;&#9472;&rarr; <span class="arrow">MCP</span> &rarr; Genie / VS / UC
+your notebook&#9472;&#9496;             you.com / your App</div>
+    </div>
+  </div>
+  <div class="engine-callout">
+    <strong>USB-C of LLM context.</strong>&nbsp;&nbsp;Open spec · Anthropic shipped first &middot; OpenAI, Google, Microsoft followed in <strong>18 months</strong>.
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 5: WHAT IT IS ═══════════ -->
+<div class="slide pad-top" id="s4">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">What MCP actually is</div>
+  <p class="slide-lead">
+    JSON-RPC 2.0 over a transport. That is the entire wire format. Everything else is convention.
+  </p>
+  <div class="code-block">&rarr; {"method": "<span class="fn">tools/list</span>"}
+&larr; {"tools": [{"name": "<span class="str">execute_sql</span>", "inputSchema": {...}}, ...]}
+
+&rarr; {"method": "<span class="fn">tools/call</span>",
+   "params": {"name": "<span class="str">execute_sql</span>",
+              "arguments": {"query": "<span class="str">SELECT 1</span>"}}}
+&larr; {"content": [{"type": "text", "text": "<span class="str">[{\"_c0\": 1}]</span>"}]}</div>
+  <p style="margin-top:1.5rem;font-size:1rem;color:var(--gray-500);max-width:75%">
+    What it is <em>not</em>: not a runtime (no code execution), not a model (provider-agnostic),
+    not a framework (FastMCP is a framework — MCP is the wire), not "function calling"
+    (function calling is a model API; MCP decouples tools from any one model).
+  </p>
+</div>
+
+<!-- ═══════════ SLIDE 6: THE ROLES ═══════════ -->
+<div class="slide pad-top" id="s5">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">Four roles</div>
+  <p class="slide-lead">
+    Host fans out. Servers don't talk to each other. Roots tell servers which workspace they
+    are scoped to.
+  </p>
+  <table class="compare-table">
+    <thead>
+      <tr><th style="width:14%">Role</th><th style="width:36%">What it is</th><th>In this workshop</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Host</strong></td>
+        <td>The app the user interacts with</td>
+        <td class="highlight-col">Genie Code · AI Playground · your notebook</td>
+      </tr>
+      <tr>
+        <td><strong>Client</strong></td>
+        <td>One protocol library inside the host, per server</td>
+        <td>Hidden — created by the host on your behalf</td>
+      </tr>
+      <tr>
+        <td><strong>Server</strong></td>
+        <td>Exposes capabilities (tools, resources, prompts)</td>
+        <td class="highlight-col">Genie Spaces · Vector Search · UC Functions · <code>bakehouse-detective</code></td>
+      </tr>
+      <tr>
+        <td><strong>Roots</strong></td>
+        <td>Workspace boundaries the host advertises</td>
+        <td>Your workspace + accessible UC catalogs</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ SLIDE 7: THREE PRIMITIVES ═══════════ -->
+<div class="slide pad-top" id="s6">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">Three primitives</div>
+  <p class="slide-lead">
+    Most servers ship only tools. They miss half the spec. Resources and prompts are where
+    the leverage is — and where Databricks Apps differentiate from managed servers.
+  </p>
+  <div class="card-grid">
+    <div class="card">
+      <span class="who model">Model picks</span>
+      <h3>Tools</h3>
+      <p style="margin-bottom:0.6rem">Model reads your description and decides when to call. JSON-Schema args, JSON return.</p>
+      <p><code>franchise_sales_trend(franchise, days)</code> &mdash; daily revenue, anchored to dataset window.</p>
+    </div>
+    <div class="card">
+      <span class="who app">App picks</span>
+      <h3>Resources</h3>
+      <p style="margin-bottom:0.6rem">Host shows them in a picker. User attaches to context. Model never reads 5,000 franchises into its window.</p>
+      <p><code>franchise://list</code> &mdash; markdown index of all 48 franchises.</p>
+    </div>
+    <div class="card">
+      <span class="who user">User picks</span>
+      <h3>Prompts</h3>
+      <p style="margin-bottom:0.6rem">Slash-command UX. Server expands a templated workflow. Opinions belong here, not in tool docstrings.</p>
+      <p><code>/diagnose_franchise austin</code> &mdash; orchestrates four tools in order.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 8: BEYOND TOOLS ═══════════ -->
+<div class="slide pad-top" id="s7">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">Beyond tools — the bidirectional bits</div>
+  <p class="slide-lead">
+    Three things that turn the host&harr;server conversation two-way. We demonstrate the first
+    two in Section D's notebook, and use sampling live in Section E.
+  </p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">&#128221;</div>
+      <h3>Sampling</h3>
+      <p style="margin-bottom:0.6rem">Server calls back to the host's LLM. <strong>No API key on the server.</strong> Host pays the bill.</p>
+      <p><code>ctx.session.create_message(...)</code> inside <code>compose_brief</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#128172;</div>
+      <h3>Elicitation</h3>
+      <p style="margin-bottom:0.6rem">Tool needs missing structured input? Don't fail or hallucinate &mdash; ask the user mid-call.</p>
+      <p><code>ctx.elicit(message=..., schema={enum: [low, med, high]})</code></p>
+    </div>
+    <div class="card">
+      <div class="card-icon">&#128276;</div>
+      <h3>Notifications</h3>
+      <p style="margin-bottom:0.6rem">Resources can change. Server pushes, host re-fetches. No polling.</p>
+      <p><code>ctx.session.send_resource_updated(uri=...)</code></p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 9: TRANSPORTS & AUTH ═══════════ -->
+<div class="slide pad-top" id="s8">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">Transports &amp; auth</div>
+  <p class="slide-lead">
+    Two transports (one deprecated). Auth is the transport's problem. On Databricks, the
+    browser session <em>is</em> the credential — no tokens to paste.
+  </p>
+  <table class="compare-table">
+    <thead>
+      <tr><th style="width:24%">Transport</th><th>When to use it</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>stdio</strong></td>
+        <td>Local servers spawned by the host. Used by desktop hosts (Cursor, Claude Desktop, Claude Code).</td>
+      </tr>
+      <tr>
+        <td><strong>Streamable HTTP</strong></td>
+        <td class="highlight-col">Remote / hosted servers. Resumable sessions. <strong>Use for production.</strong> Databricks Apps speak this.</td>
+      </tr>
+      <tr>
+        <td style="text-decoration:line-through;color:var(--gray-500)">SSE</td>
+        <td style="color:var(--gray-500)">Deprecated. Streamable HTTP replaces it.</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="engine-callout" style="margin-top:1.5rem">
+    <strong>Identity passthrough on Databricks Apps</strong> &middot;
+    <code>x-forwarded-access-token</code> + <code>x-forwarded-email</code> &rarr; every UC query runs <em>as the user</em>. RLS / CLS apply automatically.
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 10: DIVIDER — ON DATABRICKS ═══════════ -->
+<div class="slide red-bg" id="s9">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="section-num">Section 2</div>
+  <h2 class="divider-title">MCP on Databricks</h2>
+  <p class="divider-sub">
+    Three ways an MCP server reaches a host inside the workspace. Same protocol, different
+    lifecycle, different governance surface.
+  </p>
+</div>
+
+<!-- ═══════════ SLIDE 11: THE LANDSCAPE ═══════════ -->
+<div class="slide pad-top" id="s10">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">The MCP landscape on Databricks</div>
+  <p class="slide-lead">
+    Hard cap to remember: a host session can attach <strong>at most 20 tools</strong> across
+    all MCP servers. Don't connect every Genie Space and every UC schema.
+  </p>
+  <div class="arch-row three">
+    <div class="arch-box">
+      <span class="arch-tag managed">Managed</span>
+      <h3>Auto-available</h3>
+      <p class="lede">Databricks operates these. Workspace identity authorizes you. Zero setup.</p>
+      <ul>
+        <li><strong>Genie Spaces</strong> &mdash; text-to-SQL on curated tables</li>
+        <li><strong>Vector Search</strong> &mdash; every index you can read</li>
+        <li><strong>UC Functions</strong> &mdash; every function you can read</li>
+      </ul>
+    </div>
+    <div class="arch-box">
+      <span class="arch-tag external">External</span>
+      <h3>Add by URL</h3>
+      <p class="lede">Public servers from SaaS vendors. Bearer / OAuth. Every external server is a new trust surface.</p>
+      <ul>
+        <li><strong>you.com</strong>, Brave &mdash; web search</li>
+        <li><strong>Slack, Notion, GitHub</strong> &mdash; first-party</li>
+        <li>Databricks Marketplace MCP category</li>
+      </ul>
+    </div>
+    <div class="arch-box">
+      <span class="arch-tag custom">Custom App</span>
+      <h3>You deploy it</h3>
+      <p class="lede">FastMCP behind a Databricks App. Sampling, elicitation, side effects, identity passthrough.</p>
+      <ul>
+        <li><strong>Capabilities</strong> the managed servers don't have</li>
+        <li><strong>Workspace OAuth</strong> &mdash; no tokens to manage</li>
+        <li><strong>Section E</strong> &mdash; you'll deploy one</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 12: TWO HOSTS ═══════════ -->
+<div class="slide pad-top" id="s11">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">Two in-workspace hosts</div>
+  <p class="slide-lead">
+    Same managed MCPs available in both. Different UX, different ergonomics. We use both.
+  </p>
+  <div class="arch-row">
+    <div class="arch-box">
+      <span class="arch-tag host">Host</span>
+      <h3>Genie Code</h3>
+      <p class="lede">Released March 2026, replaced Databricks Assistant. Ambient chat in the notebook / SQL editor sidebar.</p>
+      <ul>
+        <li><strong>UX</strong> &mdash; "help me while I work"</li>
+        <li><strong>Trace</strong> &mdash; hidden by default</li>
+        <li><strong>Best for</strong> &mdash; finishing the task, not auditing the model</li>
+        <li><strong>Sections A &amp; E</strong> &mdash; first touch, last touch</li>
+      </ul>
+    </div>
+    <div class="arch-box">
+      <span class="arch-tag host">Host</span>
+      <h3>AI Playground</h3>
+      <p class="lede">Explicit chat surface for tool + prompt experimentation. Pick the model, attach servers, watch the wire.</p>
+      <ul>
+        <li><strong>UX</strong> &mdash; "show me what the model decided to call"</li>
+        <li><strong>Trace</strong> &mdash; <code>tools/call</code> args + results visible</li>
+        <li><strong>Best for</strong> &mdash; iterating on prompts and tool descriptions</li>
+        <li><strong>Section B</strong> &mdash; the trace is the value</li>
+      </ul>
+    </div>
+  </div>
+  <div class="engine-callout">
+    Outside the workspace: <strong>Cursor, Claude Code, Claude Desktop, VS Code</strong> &mdash;
+    the same managed servers reach those hosts via Streamable HTTP. Mentioned for context, not in the workshop's path.
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 13: GENIE IS A TOOL ═══════════ -->
+<div class="slide pad-top" id="s12">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">Genie is a tool, not the agent</div>
+  <p class="slide-lead">
+    The mistake is making Genie itself the agent. Genie does one thing well &mdash; text-to-SQL
+    on a curated space. The leverage is composing it with other tools inside one model turn.
+  </p>
+  <div class="code-block">your agent
+  &#9500;&#9472; <span class="fn">ask_genie</span>:        <span class="str">"Crumbly Creations daily revenue, full window"</span>
+  &#9500;&#9472; <span class="fn">query_vs_index</span>:   <span class="str">"Austin reviews mentioning waiting / closed"</span>
+  &#9500;&#9472; <span class="fn">you_search</span>:       <span class="str">"Austin road closures May 2024"</span>
+  &#9500;&#9472; <span class="fn">compose_brief</span>:    <span class="comment"># sampling &mdash; uses the host's LLM</span>
+  &#9492;&#9472; <span class="fn">log_finding</span>:      <span class="comment"># side effect &mdash; writes to workspace.default.findings</span></div>
+  <p style="margin-top:1.5rem;font-size:1rem;color:var(--gray-500);max-width:75%">
+    Rule of thumb: if it's <em>read or compute over Delta</em>, make it a UC function. Reach for
+    a custom FastMCP server only for sampling, elicitation, resources, or non-Delta side effects.
+  </p>
+</div>
+
+<!-- ═══════════ SLIDE 14: DIVIDER — TODAY ═══════════ -->
+<div class="slide red-bg" id="s13">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="section-num">Section 3</div>
+  <h2 class="divider-title">What we'll build &amp; do today</h2>
+  <p class="divider-sub">
+    The App you're reading this deck on <em>is</em> the workshop centerpiece &mdash; lecture, live
+    demo, and the custom MCP server you'll redeploy as your own in Section E.
+  </p>
+</div>
+
+<!-- ═══════════ SLIDE 15: THE APP ═══════════ -->
+<div class="slide pad-top" id="s14">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">The Bakehouse Detective App</div>
+  <p class="slide-lead">
+    One Databricks App with three roles: it serves this deck, it runs the live investigation
+    you'll see at the end of Hour 1, and it exposes a custom MCP endpoint that Section E
+    redeploys under your workspace.
+  </p>
+  <div class="arch-row three">
+    <div class="arch-box">
+      <span class="arch-tag custom">/mcp</span>
+      <h3>FastMCP server</h3>
+      <p class="lede">~350 LOC. The capabilities the managed servers don't have:</p>
+      <ul>
+        <li><code>franchise_sales_trend</code> &mdash; daily revenue, anchored</li>
+        <li><code>search_reviews</code> &mdash; keyword over reviews</li>
+        <li><code>compose_brief</code> &mdash; sampling, no API key</li>
+        <li><code>log_finding</code> &mdash; writes to <code>workspace.default.findings</code></li>
+        <li><code>franchise://list</code> &mdash; resource (48 franchises)</li>
+        <li><code>/diagnose_franchise</code> &mdash; prompt</li>
+      </ul>
+    </div>
+    <div class="arch-box">
+      <span class="arch-tag host">/ &middot; /demo</span>
+      <h3>Live investigation UI</h3>
+      <p class="lede">Pick a franchise. Each MCP tool call streams in as a card. The "what is MCP <em>doing</em>?" moment in a single page.</p>
+      <ul>
+        <li><strong>SSE</strong> from <code>/demo/investigate</code></li>
+        <li><strong>Identity card</strong> tells you whether you got passthrough or SP-execution mode</li>
+        <li><strong>Drives the same MCP server</strong> &mdash; not a separate code path</li>
+      </ul>
+    </div>
+    <div class="arch-box">
+      <span class="arch-tag managed">/intro-deck.html</span>
+      <h3>This deck</h3>
+      <p class="lede">Single-file HTML. Scroll-snap. No build step. Lives at <code>docs/intro-deck.html</code>.</p>
+      <ul>
+        <li><strong>Same App</strong> serves all three routes</li>
+        <li><strong>Hour 1</strong> closes by visiting <code>/</code> and running an investigation live</li>
+        <li><strong>One URL</strong> covers attendees from minute 0 through Section E</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SLIDE 16: SCHEDULE ═══════════ -->
+<div class="slide pad-top" id="s15">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <div class="slide-title">The next two hours</div>
+  <p class="slide-lead">
+    Linear curriculum &mdash; no path-picking. Same scenario, escalating capability. By 2:00 you've
+    deployed your own MCP server.
+  </p>
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th style="width:6%">#</th>
+        <th style="width:22%">Section</th>
+        <th>What you do</th>
+        <th style="width:12%">Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="step-num">A</span></td>
+        <td><strong>Genie Code + managed MCP</strong></td>
+        <td class="highlight-col">Drive the in-workspace agent. Ask the Bakehouse Sales Starter Space about the $6 day.</td>
+        <td>25 min</td>
+      </tr>
+      <tr>
+        <td><span class="step-num">B</span></td>
+        <td><strong>AI Playground + managed MCP</strong></td>
+        <td class="highlight-col">Same servers, trace visible. See <code>tools/call</code> args + results on the wire.</td>
+        <td>25 min</td>
+      </tr>
+      <tr>
+        <td><span class="step-num">C</span></td>
+        <td><strong>External MCP</strong></td>
+        <td class="highlight-col">Wire up <code>you.com</code>. Composability + trust-surface discussion.</td>
+        <td>10 min</td>
+      </tr>
+      <tr>
+        <td><span class="step-num">D</span></td>
+        <td><strong>Notebook deep-dive</strong></td>
+        <td class="highlight-col">Walk the actual JSON-RPC. Tools, resources, prompts, sampling, elicitation.</td>
+        <td>35 min</td>
+      </tr>
+      <tr>
+        <td><span class="step-num">E</span></td>
+        <td><strong>Deploy your own copy</strong></td>
+        <td class="highlight-col">Redeploy this App into <em>your</em> workspace. Add it to Genie Code. Use it.</td>
+        <td>25 min</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ SLIDE 17: CLOSING ═══════════ -->
+<div class="slide" id="s16">
+  <div class="brand"><span class="brand-mark"></span>DATABRICKS</div>
+  <h1 class="hero-title" style="font-size:clamp(2.5rem,5vw,4.5rem)">You're ready.</h1>
+  <p class="hero-sub">
+    Open your Free Edition workspace, head to <strong>Agents &rarr; MCP Servers</strong>, and we'll
+    start Section A together. End of Hour 1 is also the start of Hour 2 &mdash; we'll come back to
+    <code style="font-family:var(--mono);font-size:0.95rem">/</code> and run the live demo first.
+  </p>
+  <div style="margin-top:2.5rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a class="cta" href="/">Open the live demo</a>
+    <a class="cta outline" href="https://www.databricks.com/learn/free-edition" target="_blank" rel="noopener">Get a Free Edition workspace</a>
+  </div>
+  <p class="disclaimer">
+    Workshop materials &middot;
+    <code style="font-family:var(--mono);font-size:0.78rem">github.com/scott-mckean/mcp_workshop</code>
+    &middot; Sections A&ndash;E in <code style="font-family:var(--mono);font-size:0.78rem">README.md</code>
+  </p>
+</div>
+
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const nav = document.getElementById('dot-nav');
+  const hint = document.getElementById('key-hint');
+
+  // Build dot nav
+  slides.forEach((_, i) => {
+    const a = document.createElement('a');
+    a.href = '#s' + i;
+    if (i === 0) a.classList.add('active');
+    nav.appendChild(a);
+  });
+  const dots = nav.querySelectorAll('a');
+
+  // Track active slide
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const idx = Array.from(slides).indexOf(entry.target);
+        dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+        if (idx > 0) hint.style.opacity = '0';
+      }
+    });
+  }, { threshold: 0.55 });
+  slides.forEach(s => observer.observe(s));
+
+  // Arrow / space keyboard navigation
+  let current = 0;
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault();
+      current = Math.min(current + 1, slides.length - 1);
+      slides[current].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      current = Math.max(current - 1, 0);
+      slides[current].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      current = 0;
+      slides[0].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      current = slides.length - 1;
+      slides[current].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // Keep `current` in sync with manual scroll
+  const scrollObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        current = Array.from(slides).indexOf(entry.target);
+      }
+    });
+  }, { threshold: 0.55 });
+  slides.forEach(s => scrollObserver.observe(s));
+})();
+</script>
+
+</body>
+</html>

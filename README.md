@@ -45,17 +45,20 @@ That's it. Sections A–E run in the workspace UI. (If you'd prefer a CLI deploy
 ├── README.md                  <- you are here
 ├── databricks.yml             <- DAB bundle (notebook + App)
 ├── docs/
+│   ├── intro-deck.html        <- canonical lecture deck (also served by App at /intro-deck.html)
+│   ├── demo.html              <- canonical demo UI    (also served by App at / and /demo)
 │   ├── architecture.md        <- production-patterns appendix
 │   └── screenshots/           <- README image anchors (drop your PNGs here)
 ├── notebook/
 │   └── mcp_under_the_hood.py  <- Section D notebook (Databricks source format)
 └── app/
+    ├── app.yaml               <- App runtime config (uvicorn entrypoint)
+    ├── requirements.txt       <- App Python deps
     ├── main.py                <- FastMCP server + demo + lecture routes
-    ├── app.yaml
-    ├── requirements.txt
-    └── static/
-        ├── demo.html          <- /  and /demo  (live MCP investigation UI)
-        └── lecture.html       <- /lecture     (Hour 1 reveal.js deck)
+    └── static/                <- mirror of docs/{intro-deck,demo}.html for the App container
+                                  (hardlinked locally; refresh with `cp docs/*.html app/static/`
+                                  before `databricks bundle deploy` if you edit docs/ on a
+                                  fresh checkout)
 ```
 
 ## Deployable artifacts (optional CLI path)
@@ -89,7 +92,7 @@ Some MCP surfaces shipped in March 2026 and Free Edition support is uncertain in
 The App has two pages plus the MCP endpoint:
 
 - **`/`** (also `/demo`) — pick a franchise, watch the agent investigate live. Each MCP tool call streams in as a card. This is the workshop's "what is MCP doing?" moment in a single page.
-- **`/lecture`** — the ~36-slide reveal.js deck. Press `s` for speaker notes.
+- **`/intro-deck.html`** — the Databricks-branded Hour 1 deck. Scroll-snap; arrow keys advance slides. (`/lecture` still works as a legacy alias.)
 - **`/mcp`** — the Streamable HTTP MCP endpoint. Genie Code and Playground attach to this in Section E. Don't open it in a browser — it speaks JSON-RPC, not HTML.
 
 End the lecture by visiting the App's root URL and running an investigation on Crumbly Creations live. That's the bridge from concept to the rest of the workshop.
@@ -355,7 +358,7 @@ By the end you can sketch MCP on a napkin.
 
 The same `app/` you've already seen serving the lecture and demo. It's a small FastMCP server (`app/main.py`, ~350 LOC) that:
 
-- Hosts the workshop's static pages (`/`, `/lecture`, `/demo`).
+- Hosts the workshop's static pages (`/`, `/demo`, `/intro-deck.html`) — both files live in repo `docs/`.
 - Streams a live investigation via SSE at `/demo/investigate`.
 - Exposes an MCP server at `/mcp` with these capabilities the managed servers don't have:
 

@@ -2,14 +2,14 @@
 Bakehouse Detective — the workshop's all-in-one App.
 
 This single Databricks App serves four things:
-  - GET /            -> a small landing page (static/index.html)
-  - GET /lecture     -> the Hour 1 reveal.js deck (static/lecture.html)
-  - GET /demo        -> a live investigation UI (static/demo.html)
+  - GET /                  -> live investigation UI (docs/demo.html)
+  - GET /demo              -> same as /
+  - GET /intro-deck.html   -> the Hour 1 deck (docs/intro-deck.html)
   - GET /demo/investigate?franchise=X  -> SSE stream that runs the investigation
                                           step-by-step and emits each MCP tool
                                           call as it happens
-  - POST/GET /mcp    -> the FastMCP Streamable HTTP endpoint
-  - GET /healthz     -> health check
+  - POST/GET /mcp          -> the FastMCP Streamable HTTP endpoint
+  - GET /healthz           -> health check
 
 The MCP tools (`franchise_sales_trend`, `search_reviews`, `compose_brief`,
 `log_finding`) plus a resource (`franchise://list`) and a prompt
@@ -285,16 +285,22 @@ async def debug_headers(request: Request) -> dict[str, Any]:
 
 
 # --- Static pages: lecture + demo (demo is also the front door) -------------
+#
+# Canonical files live at repo `docs/` (so they double as GitHub Pages content);
+# `app/static/{intro-deck,demo}.html` are symlinks into `../../docs/` that the
+# bundle deploy resolves at upload time, so the App container sees real files.
 
 @app.get("/", include_in_schema=False)
 @app.get("/demo", include_in_schema=False)
+@app.get("/demo.html", include_in_schema=False)
 def demo() -> FileResponse:
     return FileResponse(STATIC_DIR / "demo.html")
 
 
-@app.get("/lecture", include_in_schema=False)
+@app.get("/intro-deck.html", include_in_schema=False)
+@app.get("/lecture", include_in_schema=False)  # legacy alias
 def lecture() -> FileResponse:
-    return FileResponse(STATIC_DIR / "lecture.html")
+    return FileResponse(STATIC_DIR / "intro-deck.html")
 
 
 # --- SSE investigation endpoint for the demo page ---------------------------
